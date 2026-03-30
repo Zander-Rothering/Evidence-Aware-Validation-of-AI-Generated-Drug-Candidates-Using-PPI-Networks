@@ -1,5 +1,6 @@
 # fingerprint_encoder.py
 
+
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit import DataStructs
@@ -21,3 +22,19 @@ class FingerprintEncoder:
 
     def to_numpy(self, fingerprint):
         # converts fingerprint to numpy array
+
+
+
+
+
+
+
+
+
+## you receive a receive:** a molecule object and return a fingerprint — a row of 2048 zeros and ones mol     
+#Test your code with this #
+# Chem.MolFromSmiles("CC(C)c1ccccc1")
+#encoder = FingerprintEncoder()
+#fp      = encoder.encode(mol)
+#print(fp)           # fingerprint object
+#print(type(fp))     # should be rdkit fingerprint type
