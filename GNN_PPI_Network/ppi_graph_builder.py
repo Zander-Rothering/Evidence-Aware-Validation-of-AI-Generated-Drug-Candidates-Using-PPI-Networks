@@ -1,7 +1,5 @@
 import torch
-from torch_geometric.data import Data
 import stringdb
-import pandas as pd
 
 #2stringdb.api.get_network(identifiers, species=9606, required_score=400, caller_identity='https://github.com/gpp-rnd/stringdb', add_nodes=0)[source]¶
 #Get the ppi network for a list of string ids
@@ -14,8 +12,6 @@ import pandas as pd
 #add_nodes (int, optional) – number of nodes to add to the network based on confidence
 #Returns:	
 #network edges
-
-PPI_df = stringdb.get_network(identifiers = ["HMGCR"], species=9606, required_score = 400, caller_identity = "HMGCR", add_nodes=1000)
 
 # Output (Dataframe) 
 #stringId_A stringId_B preferredName_A preferredName_B  ncbiTaxonId  score  nscore  fscore  pscore  ascore  escore  dscore  tscore
@@ -33,37 +29,62 @@ PPI_df = stringdb.get_network(identifiers = ["HMGCR"], species=9606, required_sc
 #escore: (Experimental) Derived from high-throughput lab data like affinity chromatography or yeast two-hybrid screens.
 #dscore: (Database) Extracted from curated knowledge in other public databases (e.g., KEGG, Reactome).
 #tscore: (Textmining) Derived from the statistical co-occurrence of protein names in scientific abstracts (PubMed).
+class PPIGraphBuilder:
+    """
+    
+    """
+    def __init__(self, species=9606, score_threshold=400, add_nodes=10000):
+        self.species = species
+        self.score_threshold = score_threshold
+        self.add_nodes = add_nodes
 
-print(PPI_df.shape)
-print(PPI_df.head())
+    def get_stringdb_network(self, identifiers= ["HMGCR"]):
+        PPI_df = stringdb.get_network(identifiers = identifiers, 
+                                      species= self.species, 
+                                      required_score = self.score_threshold, 
+                                      caller_identity = "PPI_GNN", 
+                                      add_nodes= self.add_nodes)
+        
+        return PPI_df
+        
+    def protein_extraction(self, df):
+        # Extract all unique proteins in df
+        proteinA = set(df['preferredName_A'])
+        proteinB = set(df['preferredName_B'])
+        proteins = proteinA.union(proteinB)
 
-# Extract all unique proteins in df
-ProteinA = set(PPI_df['preferredName_A'])
-ProteinB = set(PPI_df['preferredName_B'])
-Proteins = ProteinA.union(ProteinB)
+        # Map proteins to create edges
+        protein_mapping = {name: i for i, name in enumerate(proteins)}
 
-# Map proteins to create edges
-Protein_mapping = {name: i for i, name in enumerate(Proteins)}
+        return proteins, protein_mapping
 
-# Source proteins
-src = [Protein_mapping[name] for name in PPI_df['preferredName_A']]
+    def build_edges(self, df, mapping):
+        """Create edge_index tensor."""
+        # Source proteins
+        src = [mapping[name] for name in df['preferredName_A']]
 
-# Desitnation protein 
-dst = [Protein_mapping[name] for name in PPI_df['preferredName_B']]
+        # Destination protein
+        dst = [mapping[name] for name in df['preferredName_B']]
 
-# Undirected torch tensor of edges
-edge_index = torch.tensor([src + dst, dst + src], dtype=torch.long)
+        # Undirected torch tensor of edges
+        edge_index = torch.tensor([src + dst, dst + src], dtype=torch.long)
 
-# Normalize edge weights to between 0-1 
-scores = PPI_df['score'].values/1000.0
+        return edge_index
 
-# Torch tensor of scores to be used as edge attributes
-edge_weights = torch.tensor(list(scores)*2, dtype=torch.float)
+    def edge_weights(self, df):
+        """Create edge weights to be stored as edge_attributes"""
+        # Normalize edge weights to between 0-1
+        scores = df['score'].values / 1000.0
+        # Torch tensor of scores to be used as edge attributes
+        edge_weights = torch.tensor(list(scores) * 2, dtype=torch.float)
+        return edge_weights
 
+PPIGraphBuilder = PPIGraphBuilder()
+PPI_DF = PPIGraphBuilder.get_stringdb_network()
+proteins, protein_mapping = PPIGraphBuilder.protein_extraction(PPI_DF)
+edge_index = PPIGraphBuilder.build_edges(PPI_DF, protein_mapping)
+edge_weights = PPIGraphBuilder.edge_weights(PPI_DF)
 print(edge_index[0:3][0:3])
 print(edge_weights[0:3])
-# Create torch geomtric object to use as graph
-# x = node features (Protein features)
-# edge_index = interactions between proteins
-# edge_attr = interaction score normalized
-#data = Data(x=x, edge_index=edge_index, edge_attr=edge_weights)
+print(PPI_DF.shape)
+print(PPI_DF.head())
