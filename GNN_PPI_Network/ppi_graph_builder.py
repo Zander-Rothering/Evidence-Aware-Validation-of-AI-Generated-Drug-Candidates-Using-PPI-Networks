@@ -2,8 +2,10 @@ import torch
 from torch_geometric.data import Data
 import stringdb
 import pandas as pd
+import requests
+from sklearn.preprocessing import MultiLabelBinarizer
 
-#stringdb.api.get_network(identifiers, species=9606, required_score=400, caller_identity='https://github.com/gpp-rnd/stringdb', add_nodes=0)[source]¶
+#2stringdb.api.get_network(identifiers, species=9606, required_score=400, caller_identity='https://github.com/gpp-rnd/stringdb', add_nodes=0)[source]¶
 #Get the ppi network for a list of string ids
 
 #Parameters:	
@@ -60,8 +62,50 @@ scores = PPI_df['score'].values/1000.0
 # Torch tensor of scores to be used as edge attributes
 edge_weights = torch.tensor(list(scores)*2, dtype=torch.float)
 
+print(edge_index[0:3][0:3])
+print(edge_weights[0:3])
 # Create torch geomtric object to use as graph
 # x = node features (Protein features)
 # edge_index = interactions between proteins
 # edge_attr = interaction score normalized
-data = Data(x=x, edge_index=edge_index, edge_attr=edge_weights)
+#data = Data(x=x, edge_index=edge_index, edge_attr=edge_weights)
+
+
+def get_biological_features(Proteins):
+    # 1. UniProt: Get annotations (e.g., Subcellular location, Function)
+    uniprot_url = "https://rest.uniprot.org/uniprotkb/search"
+    # 2. DisGeNET: Get gene-disease associations
+    disgenet_url = "http://disgenet.org"
+    # 3. KEGG: Get pathways via Biopython or REST
+    # (Simplified: logic assumes you've collected these into a dictionary)
+    
+    # Example structure of the collected data:
+    # protein_data = {
+    #    "HMGCR": {"diseases": ["Diabetes", "Hypercholesterolemia"], "pathways": ["hsa00900"]},
+    #    "INSIG1": {"diseases": ["Obesity"], "pathways": ["hsa04923"]}
+    # }
+    return protein_data
+
+protein_data = get_biological_features()
+
+def create_feature_matrix(protein_data, Protein_mapping):
+    # protein_map is your {name: index} from the previous STRING step
+    num_nodes = len(Protein_mapping)
+    
+    # Extract list of features for each protein in the correct order (0 to N)
+    ordered_features = []
+    for name in sorted(Protein_mapping, key=Protein_mapping.get):
+        features = protein_data.get(name, {})
+        # Combine all labels into one long list of strings for this node
+        all_labels = features.get('diseases', []) + features.get('pathways', [])
+        ordered_features.append(all_labels)
+
+    # Convert strings to Multi-Hot Encoding
+    mlb = MultiLabelBinarizer()
+    x_numpy = mlb.fit_transform(ordered_features)
+    
+    # Convert to PyTorch tensor
+    x = torch.tensor(x_numpy, dtype=torch.float)
+    return x
+
+x = create_feature_matrix()

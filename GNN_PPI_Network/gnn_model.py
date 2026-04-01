@@ -6,7 +6,6 @@ from torch.nn import Linear, Parameter
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import add_self_loops, degree
 
-
 class GNNLayer(MessagePassing):
     """
     Graph Neural Network layer for risk modeling of protein-protein interactions.
