@@ -1,6 +1,11 @@
-"""Activity 4 minimal implementation only so far:
-   Build the Reference Library from ChEMBL."""
+"""Activity 4 — Build the Reference Library from ChEMBL.
+   Activity 9 — Load SIDER inherited adverse-effect profiles.
+   Developed with AI assistance (Claude, Anthropic) for syntax support.
+"""
 
+import os
+import requests
+import pandas as pd
 from rdkit import Chem
 from rdkit.Chem.rdFingerprintGenerator import GetMorganGenerator
 
@@ -37,6 +42,7 @@ class CompoundLoader:
         """Set ChEMBL target ID (default: HMGCR human)."""
         self.target_chembl_id = target_chembl_id
         self.library = []
+        self.fingerprint_generator = GetMorganGenerator(radius=2, fpSize=2048)
 
     def load_reference_library(self):
         """Try ChEMBL first; fall back to built-in statins on failure."""
@@ -59,6 +65,7 @@ class CompoundLoader:
         results = new_client.activity.filter(
             target_chembl_id=self.target_chembl_id,
             standard_type="IC50",
+            assay_type="B",
         ).only(["molecule_chembl_id", "canonical_smiles", "standard_value"])
 
         compounds = []
@@ -95,8 +102,6 @@ class CompoundLoader:
         print(f"Loaded {len(compounds)} fallback statins")
         return compounds
 
-    fingerprint_generator = GetMorganGenerator(radius=2, fpSize=2048)
-
     def _make_fingerprint(self, smiles):
         """Generate ECFP4 Morgan fingerprint (2048 bits) from a SMILES string."""
         mol = Chem.MolFromSmiles(smiles)
@@ -104,11 +109,213 @@ class CompoundLoader:
             return None
         return self.fingerprint_generator.GetFingerprint(mol)
 
+    # ----------
+    # Activity 9 — SIDER inherited adverse-effect lookup 
+
+    # Tier 3 fallback: known statin-class adverse effects.
+    # Used only when both PubChem API and local SIDER file fail.
+    _SIDER_FALLBACK = {
+        "atorvastatin":  ["myopathy", "hepatotoxicity", "rhabdomyolysis",
+                          "diabetes mellitus", "peripheral neuropathy"],
+        "rosuvastatin":  ["myopathy", "hepatotoxicity", "rhabdomyolysis",
+                          "proteinuria", "haematuria"],
+        "simvastatin":   ["myopathy", "hepatotoxicity", "rhabdomyolysis",
+                          "diabetes mellitus", "memory impairment"],
+        "pravastatin":   ["myopathy", "hepatotoxicity", "rhabdomyolysis",
+                          "dizziness"],
+        "fluvastatin":   ["myopathy", "hepatotoxicity", "insomnia",
+                          "dyspepsia"],
+        "lovastatin":    ["myopathy", "hepatotoxicity", "rhabdomyolysis",
+                          "constipation", "abdominal pain"],
+        "pitavastatin":  ["myopathy", "hepatotoxicity", "rhabdomyolysis",
+                          "arthralgia"],
+    }
+
+    # Cached SIDER dataframe — loaded once per process, shared across
+    # all CompoundLoader instances to avoid re-reading the gzipped file.
+    _sider_df_cache = None
+
+    # SIDER side-effect file downloaded from http://sideeffects.embl.de/download/
+    # and placed at Compund_Matching_Engine/sider_data/meddra_all_se.tsv.gz
+    _SIDER_FILE = os.path.join(
+        os.path.dirname(__file__), "sider_data", "meddra_all_se.tsv.gz"
+    )
+
+    def _name_to_cid(self, drug_name):
+        """Tier 1 helper: resolve a drug name to a PubChem CID via REST API.
+
+        Returns the integer CID, or None on any failure.
+        """
+        url = (
+            "https://pubchem.ncbi.nlm.nih.gov/rest/pug/"
+            f"compound/name/{requests.utils.quote(drug_name)}/cids/JSON"
+        )
+        try:
+            resp = requests.get(url, timeout=5)
+            resp.raise_for_status()
+            cids = resp.json()["IdentifierList"]["CID"]
+            return cids[0] if cids else None
+        except Exception:
+            return None
+
+    def _load_sider_df(self):
+        """Tier 2 helper: lazily load and cache the SIDER TSV file.
+
+        Returns the filtered dataframe (meddra_type == 'PT' only),
+        or None if the file does not exist.
+        """
+        if CompoundLoader._sider_df_cache is not None:
+            return CompoundLoader._sider_df_cache
+
+        if not os.path.isfile(self._SIDER_FILE):
+            return None
+
+        try:
+            df = pd.read_csv(
+                self._SIDER_FILE,
+                sep="\t",
+                header=None,
+                names=[
+                    "stitch_flat", "stitch_stereo", "umls_cui",
+                    "meddra_type", "umls_cui_name", "side_effect_name",
+                ],
+            )
+            df = df[df["meddra_type"] == "PT"]
+            CompoundLoader._sider_df_cache = df
+            return df
+        except Exception:
+            return None
+
+    # Offline name->CID map for common statins so Tier 2 can work
+    # even when the PubChem API is unreachable.
+    _NAME_TO_CID_FALLBACK = {
+        "atorvastatin": 60823,
+        "rosuvastatin":  461310,
+        "simvastatin":   54454,
+        "pravastatin":   54687,
+        "fluvastatin":   446155,
+        "lovastatin":    53232,
+        "pitavastatin":  5282452,
+    }
+
+    @staticmethod
+    def _cid_to_stitch(cid):
+        """Convert a PubChem CID to a STITCH flat identifier.
+
+        STITCH flat format: 'CID1' + zero-padded CID to 8 digits.
+        Example: 54454 -> CID100054454
+        """
+        return f"CID1{cid:08d}"
+
+    def _query_sider(self, nn_name):
+        """Look up known adverse effects for a drug name.
+
+        Uses a 3-tier fallback strategy:
+          Tier 1 — PubChem API (name -> CID) -> STITCH ID -> SIDER file
+          Tier 2 — Offline CID map -> STITCH ID -> SIDER file (no API)
+          Tier 3 — Hardcoded statin side-effect dictionary
+
+        All tiers return list[str] of side-effect names.
+        """
+        key = nn_name.strip().lower()
+
+        # ── Tier 1: PubChem API -> CID -> SIDER file 
+        cid = self._name_to_cid(key)
+        if cid is not None:
+            sider_df = self._load_sider_df()
+            if sider_df is not None:
+                stitch_id = self._cid_to_stitch(cid)
+                hits = sider_df[sider_df["stitch_flat"] == stitch_id]
+                if not hits.empty:
+                    effects = hits["side_effect_name"].unique().tolist()
+                    print(f"[SIDER Tier 1] {nn_name} -> CID {cid} -> "
+                          f"{len(effects)} effects from SIDER file")
+                    return effects
+
+        # ── Tier 2: offline CID map -> SIDER file (no API) 
+        fallback_cid = self._NAME_TO_CID_FALLBACK.get(key)
+        if fallback_cid is not None and fallback_cid != cid:
+            sider_df = self._load_sider_df()
+            if sider_df is not None:
+                stitch_id = self._cid_to_stitch(fallback_cid)
+                hits = sider_df[sider_df["stitch_flat"] == stitch_id]
+                if not hits.empty:
+                    effects = hits["side_effect_name"].unique().tolist()
+                    print(f"[SIDER Tier 2] {nn_name} -> CID {fallback_cid} -> "
+                          f"{len(effects)} effects from SIDER file (offline CID)")
+                    return effects
+
+        # -- Tier 3: hardcoded fallback 
+        # Only return effects for drugs explicitly known.
+        # For unknown drugs, return an empty list rather than
+        # guessing statin-specific risks that may not apply.
+        effects = list(self._SIDER_FALLBACK.get(key, []))
+        print(f"[SIDER Tier 3] {nn_name} -> {len(effects)} effects "
+              f"from hardcoded fallback")
+        return effects
+
+    def load_sider_risks(self, nn_name, tanimoto):
+        """Inherit adverse effects from the nearest-neighbour drug.
+
+        Parameters
+        ----------
+        nn_name : str
+            Drug name of the nearest neighbour (from Activity 5).
+        tanimoto : float
+            Tanimoto similarity score between query and nearest neighbour.
+
+        Returns
+        -------
+        list[dict]
+            Each dict has keys "effect", "tag", and "tanimoto".
+            Empty list when tanimoto is below the inheritance threshold.
+        """
+        if tanimoto < 0.40:
+            return []
+
+        if tanimoto >= 0.80:
+            tag = "directly inherited"
+        else:
+            tag = "inherited by similarity"
+
+        effects = self._query_sider(nn_name)
+
+        return [
+            {"effect": effect, "tag": tag, "tanimoto": round(tanimoto, 4)}
+            for effect in effects
+        ]
+
 
 if __name__ == "__main__":
     loader = CompoundLoader()
+
+    # Activity 4: load reference library
     lib = loader.load_reference_library()
     print(f"\nLoaded {len(lib)} compounds total\n")
-    for name, smiles, ic50, fingerprint in lib:
+    for name, smiles, ic50, fingerprint in lib[:5]:
         print(f"  {name}: IC50={ic50} nM, bits={fingerprint.GetNumOnBits()}")
+    if len(lib) > 5:
+        print(f"  ... and {len(lib) - 5} more\n")
+
+    # Activity 9: SIDER risk inheritance demo
+    print("-----------------------------------------")
+    print("Activity 9 — SIDER inherited adverse-effect lookup")
+    print("-----------------------------------------")
+
+    test_cases = [
+        ("simvastatin",   0.85),
+        ("atorvastatin",  0.65),
+        ("lovastatin",    0.30),
+        ("some_unknown",  0.90),
+    ]
+    for drug, tani in test_cases:
+        print(f"\n--- {drug}, tanimoto={tani} ---")
+        risks = loader.load_sider_risks(drug, tani)
+        if not risks:
+            print("  No risks inherited (below threshold or unknown drug)")
+        else:
+            for r in risks[:5]:
+                print(f"  [{r['tag']}] {r['effect']}")
+            if len(risks) > 5:
+                print(f"  ... and {len(risks) - 5} more")
 
