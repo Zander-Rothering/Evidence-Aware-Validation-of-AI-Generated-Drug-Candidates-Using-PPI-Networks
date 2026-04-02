@@ -1,5 +1,6 @@
 import torch
 import stringdb
+import pandas as pd
 
 #2stringdb.api.get_network(identifiers, species=9606, required_score=400, caller_identity='https://github.com/gpp-rnd/stringdb', add_nodes=0)[source]¶
 #Get the ppi network for a list of string ids
@@ -78,6 +79,28 @@ class PPIGraphBuilder:
         # Torch tensor of scores to be used as edge attributes
         edge_weights = torch.tensor(list(scores) * 2, dtype=torch.float)
         return edge_weights
+    def get_biogrid_network(self, biogrid_file_path, target_protein="HMGCR"):
+        """Load BioGRID data and filter for HMGCR interactions."""
+        df = pd.read_csv(biogrid_file_path, sep='\t', low_memory=False)
+        
+        # Filter to human proteins only (tax ID 9606)
+        df = df[(df['Organism ID Interactor A'] == 9606) & 
+                (df['Organism ID Interactor B'] == 9606)]
+        
+        # Filter to rows involving HMGCR
+        mask = ((df['Official Symbol Interactor A'] == target_protein) | 
+                (df['Official Symbol Interactor B'] == target_protein))
+        df = df[mask]
+        
+        # Standardize column names to match STRING output
+        biogrid_edges = pd.DataFrame({
+            'preferredName_A': df['Official Symbol Interactor A'].values,
+            'preferredName_B': df['Official Symbol Interactor B'].values,
+            'score': 700  # treat all experimental as high confidence
+        })
+        
+        return biogrid_edges
+    
 
 PPIGraphBuilder = PPIGraphBuilder()
 PPI_DF = PPIGraphBuilder.get_stringdb_network()
