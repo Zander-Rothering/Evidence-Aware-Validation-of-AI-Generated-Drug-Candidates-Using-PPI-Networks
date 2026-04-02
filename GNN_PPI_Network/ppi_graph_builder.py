@@ -79,6 +79,7 @@ class PPIGraphBuilder:
         # Torch tensor of scores to be used as edge attributes
         edge_weights = torch.tensor(list(scores) * 2, dtype=torch.float)
         return edge_weights
+    
     def get_biogrid_network(self, biogrid_file_path, target_protein="HMGCR"):
         """Load BioGRID data and filter for HMGCR interactions."""
         df = pd.read_csv(biogrid_file_path, sep='\t', low_memory=False)
@@ -101,13 +102,36 @@ class PPIGraphBuilder:
         
         return biogrid_edges
     
+    def merge_networks(self, string_df, biogrid_df):
+        """Combine STRING and BioGRID, drop duplicate edges."""
+        combined = pd.concat([
+            string_df[['preferredName_A', 'preferredName_B', 'score']], 
+            biogrid_df
+        ], ignore_index=True)
+    
+        combined = combined.drop_duplicates(
+            subset=['preferredName_A', 'preferredName_B']
+        )
+    
+        return combined
 
-PPIGraphBuilder = PPIGraphBuilder()
-PPI_DF = PPIGraphBuilder.get_stringdb_network()
-proteins, protein_mapping = PPIGraphBuilder.protein_extraction(PPI_DF)
-edge_index = PPIGraphBuilder.build_edges(PPI_DF, protein_mapping)
-edge_weights = PPIGraphBuilder.edge_weights(PPI_DF)
+GraphBuilder = PPIGraphBuilder()
+PPI__STRING_DF = GraphBuilder.get_stringdb_network()
+#adding Biogrid part
+PPI_BIOGRID_DF = GraphBuilder.get_biogrid_network("BIOGRID-ALL-5.0.256.tab3.txt")
+
+#merge string and biogrid
+PPI_COMBINED_DF = GraphBuilder.merge_networks(PPI__STRING_DF, PPI_BIOGRID_DF)
+proteins, protein_mapping = GraphBuilder.protein_extraction(PPI_COMBINED_DF)
+edge_index = GraphBuilder.build_edges(PPI_COMBINED_DF, protein_mapping)
+edge_weights = GraphBuilder.edge_weights(PPI_COMBINED_DF)
 print(edge_index[0:3][0:3])
 print(edge_weights[0:3])
-print(PPI_DF.shape)
-print(PPI_DF.head())
+print(PPI__STRING_DF.shape)
+print(PPI__STRING_DF.head())
+
+#my sanity checks (Shivani)
+print(f"STRING edges: {len(PPI__STRING_DF)}")
+print(f"BioGRID edges: {len(PPI_BIOGRID_DF)}")
+print(f"Combined edges after dedup: {len(PPI_COMBINED_DF)}")
+print(f"Total unique proteins: {len(proteins)}")
