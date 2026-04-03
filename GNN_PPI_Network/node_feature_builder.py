@@ -1,70 +1,72 @@
 import requests
 import pandas as pd
+import numpy as np
 from ppi_graph_builder import PPIGraphBuilder
 
-def chunk_list(lst, size=100):
-    """Yield successive chunks from a list."""
-    for i in range(0, len(lst), size):
-        yield lst[i:i + size]
-
-def get_uniprot_chunk(proteins):
-    # Query UniProt for functional data and cross-references
+def get_uniprot(proteins):
     url = "https://rest.uniprot.org/uniprotkb/search"
 
-    gene_query = " OR ".join([f'gene_exact:"{p}"' for p in proteins])
-    query = f'({gene_query}) AND organism_id:9606'
+    uniprot_features = [] 
 
-    payload = {
-        'query': query,
-        'fields': 'accession,gene_names,lineage,cc_subcellular_location,xref_kegg,xref_reactome',
-        'format': 'json'
-    }
+    for p in proteins:
+        query = f'gene_exact:"{p}" AND organism_id:9606'
+        payload = {
+            'query': query,
+            'fields': 'accession,gene_names,id,ft_domain,cc_function,cc_subcellular_location,go,xref_kegg,xref_reactome',
+            'format': 'json'
+        }
 
-    uniprot_response = requests.get(url, params=payload)
+        uniprot_response = requests.get(url, params=payload)
+        uniprot_response.raise_for_status()
 
-    if uniprot_response.status_code != 200:
-        return None
+        uniprot_data = uniprot_response.json()
+        uniprot_results = uniprot_data.get("results", []) 
+        
+        uniprot_df = pd.json_normalize(uniprot_results)
+        uniprot_features.append(uniprot_df)
 
-    protein_data = uniprot_response.json()
-    protein_results = protein_data.get("results", [])
-    protein_df = pd.json_normalize(protein_results)
+    return pd.concat(uniprot_features, ignore_index=True)
 
-    return protein_df
+def get_disgenet(entrez_ids, api_key):
+    base_url = "https://api.disgenet.com/api/v1"
+    headers = {"Authorization": f"Bearer {api_key}"}
+    disgenet_results = []
 
-def get_uniprot_data(proteins, chunk_size=100):
-    proteins = list(set(proteins))  # deduplicate
+    for id in entrez_ids:
 
-    all_dfs = []
-    failed_genes = []
+        DisGeNET_response = requests.get(f"{base_url}/gda/gene/{int(id)}", headers=headers)
+        
+        DisGeNET_response.raise_for_status()
 
-    for i, chunk in enumerate(chunk_list(proteins, chunk_size)):
-        print(f"Chunk {i+1} ({len(chunk)} genes)")
+        DisGeNET_data = DisGeNET_response.json()
+        DisGeNET_data['entrez_id'] = id
+        disgenet_results.append(DisGeNET_data)
+            
+    return pd.concat(disgenet_results, ignore_index=True)
 
-        # Batch query first
-        gene_query = " OR ".join([f'gene:"{p}"' for p in chunk])
-        query = f"({gene_query}) AND organism_id:9606"
+def get_biological_features(protein_list, disgenet_api_key):
+    uniprot_df = get_uniprot(protein_list)
+    
+    entrez_ids = uniprot_df['entrez_id'].dropna().unique()
 
-        df_chunk = get_uniprot_chunk(query)
+    disgenet_df = get_disgenet(entrez_ids, disgenet_api_key)
 
-        if df_chunk is not None:
-            all_dfs.append(df_chunk)
-            continue
+    uniprot_df['entrez_id'] = uniprot_df['entrez_id'].astype(str)
+    disgenet_df['entrez_id'] = disgenet_df['entrez_id'].astype(str)
+        
+    protein_features = pd.merge(uniprot_df, disgenet_df, on='entrez_id', how='left')
 
-        # If batch fails → fallback to per-gene queries
-        print("Chunk failed, falling back to per-gene queries...")
+    return protein_features
 
-        for gene in chunk:
-            single_query = f'gene:"{gene}" AND organism_id:9606'
-            df_gene = get_uniprot_chunk(single_query)
+GraphBuilder = PPIGraphBuilder()
+PPI__STRING_DF = GraphBuilder.get_stringdb_network()
 
-            if df_gene is None or df_gene.empty:
-                failed_genes.append(gene)
-            else:
-                all_dfs.append(df_gene)
+PPI_BIOGRID_DF = GraphBuilder.get_biogrid_network("BIOGRID-ALL-5.0.256.tab3.txt")
 
-    if all_dfs:
-        full_df = pd.concat(all_dfs, ignore_index=True)
-    else:
-        full_df = pd.DataFrame()
+#merge string and biogrid
+PPI_COMBINED_DF = GraphBuilder.merge_networks(PPI__STRING_DF, PPI_BIOGRID_DF)
+proteins, protein_mapping = GraphBuilder.protein_extraction(PPI_COMBINED_DF)
 
-    return full_df, failed_genes
+proteins = list(proteins)
+proteins_features = get_uniprot(proteins[0:7])
+print(proteins_features.head())
