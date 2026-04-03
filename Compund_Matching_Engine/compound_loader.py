@@ -69,6 +69,7 @@ class CompoundLoader:
         ).only(["molecule_chembl_id", "canonical_smiles", "standard_value"])
 
         compounds = []
+        seen_smiles: set[str] = set()
         for rec in results:
             if len(compounds) >= 200:
                 break
@@ -79,6 +80,9 @@ class CompoundLoader:
 
             if not smiles or not val:
                 continue
+            if smiles in seen_smiles:
+                continue
+            seen_smiles.add(smiles)
             try:
                 ic50 = float(val)
             except (ValueError, TypeError):
