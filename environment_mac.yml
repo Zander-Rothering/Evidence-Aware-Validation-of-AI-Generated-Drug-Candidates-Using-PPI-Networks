@@ -1,0 +1,26 @@
+name: project_env
+channels:
+  - pytorch
+  - pyg
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.10
+  - pip
+  - pytorch
+  - torchvision
+  - torchaudio
+  - torch-geometric
+  - pyg
+  - torch-scatter
+  - torch-sparse
+  - torch-cluster
+  - torch-spline-conv
+  - rdkit
+  - pandas
+  - numpy
+  - requests
+
+  - pip:
+      - stringdb
