@@ -4,6 +4,7 @@
 """
 
 import os
+import pickle
 import requests
 import pandas as pd
 from rdkit import Chem
@@ -44,15 +45,52 @@ class CompoundLoader:
         self.library = []
         self.fingerprint_generator = GetMorganGenerator(radius=2, fpSize=2048)
 
+    # Cache file lives next to compound_loader.py:
+    # Compund_Matching_Engine/chembl_cache.pkl
+    _CACHE_FILE = os.path.join(os.path.dirname(__file__), "chembl_cache.pkl")
+
     def load_reference_library(self):
-        """Try ChEMBL first; fall back to built-in statins on failure."""
+        """Load the reference compound library with pickle caching.
+
+        ChEMBL is unreliable (frequent 500 errors), and during deep-learning
+        training loops the library is loaded repeatedly. Calling the API on
+        every iteration is unnecessary because the reference compounds never
+        change between runs.
+
+        Caching strategy:
+          1. If chembl_cache.pkl exists  -> load from cache, skip API entirely.
+          2. If no cache                 -> fetch from ChEMBL, save to cache.
+          3. If ChEMBL fails             -> use fallback statins, do NOT cache
+             (so the next run retries ChEMBL when the server is back).
+
+        Cache location: Compund_Matching_Engine/chembl_cache.pkl
+        (same directory as this file, excluded from git).
+        """
+        # 1. Try loading from cache
+        if os.path.isfile(self._CACHE_FILE):
+            try:
+                with open(self._CACHE_FILE, "rb") as f:
+                    self.library = pickle.load(f)
+                print(f"Loaded {len(self.library)} compounds from cache "
+                      f"({self._CACHE_FILE})")
+                return self.library
+            except Exception as e:
+                print(f"Cache load failed ({e}), fetching from ChEMBL")
+
+        # 2. Fetch from ChEMBL
         try:
             self.library = self._fetch_from_chembl()
             if not self.library:
                 raise ValueError("no results")
             print(f"Loaded {len(self.library)} compounds from ChEMBL")
 
+            # Save to cache for future runs
+            with open(self._CACHE_FILE, "wb") as f:
+                pickle.dump(self.library, f)
+            print(f"Cached to {self._CACHE_FILE}")
+
         except Exception as e:
+            # 3. Fallback — do NOT cache so we retry ChEMBL next time
             print(f"ChEMBL failed ({e}), using 7 fallback statins")
             self.library = self._load_fallback_statins()
 
@@ -71,7 +109,7 @@ class CompoundLoader:
         compounds = []
         seen_smiles: set[str] = set()
         for rec in results:
-            if len(compounds) >= 200:
+            if len(compounds) >= 200:  # increase this number if more compounds are needed (delete chembl_cache.pkl after changing)
                 break
 
             smiles = rec.get("canonical_smiles")
