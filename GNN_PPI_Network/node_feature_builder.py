@@ -1,72 +1,79 @@
 import requests
 import pandas as pd
-import numpy as np
-from ppi_graph_builder import PPIGraphBuilder
 
-def get_uniprot(proteins):
-    url = "https://rest.uniprot.org/uniprotkb/search"
-
-    uniprot_features = [] 
-
-    for p in proteins:
-        query = f'gene_exact:"{p}" AND organism_id:9606'
-        payload = {
-            'query': query,
-            'fields': 'accession,gene_names,id,ft_domain,cc_function,cc_subcellular_location,go,xref_kegg,xref_reactome',
-            'format': 'json'
-        }
-
-        uniprot_response = requests.get(url, params=payload)
-        uniprot_response.raise_for_status()
-
-        uniprot_data = uniprot_response.json()
-        uniprot_results = uniprot_data.get("results", []) 
+class feature_extracter:
+    def __init__(self, proteins_file= "proteins.txt"):
+        with open(proteins_file, "r") as f:
+            proteins = [line.strip() for line in f if line.strip()] 
         
-        uniprot_df = pd.json_normalize(uniprot_results)
-        uniprot_features.append(uniprot_df)
+        self.proteins = proteins
 
-    return pd.concat(uniprot_features, ignore_index=True)
+    def get_uniprot(self, save_path= "uniprot_features.csv"):
+        url = "https://rest.uniprot.org/uniprotkb/search"
 
-def get_disgenet(entrez_ids, api_key):
-    base_url = "https://api.disgenet.com/api/v1"
-    headers = {"Authorization": f"Bearer {api_key}"}
-    disgenet_results = []
+        uniprot_features = []
 
-    for id in entrez_ids:
+        for p in self.proteins:
+            query = f'gene_exact:"{p}" AND organism_id:9606'
+            payload = {
+                'query': query,
+                'fields': 'accession,gene_names,ft_domain,cc_function,cc_subcellular_location,go,xref_kegg,xref_reactome',
+                'format': 'json'
+            }
 
-        DisGeNET_response = requests.get(f"{base_url}/gda/gene/{int(id)}", headers=headers)
-        
-        DisGeNET_response.raise_for_status()
+            uniprot_response = requests.get(url, params=payload)
+            uniprot_response.raise_for_status()
 
-        DisGeNET_data = DisGeNET_response.json()
-        DisGeNET_data['entrez_id'] = id
-        disgenet_results.append(DisGeNET_data)
+            uniprot_data = uniprot_response.json()
+            uniprot_results = uniprot_data.get("results", []) 
             
-    return pd.concat(disgenet_results, ignore_index=True)
+            uniprot_df = pd.json_normalize(uniprot_results)
+            uniprot_features.append(uniprot_df)
 
-def get_biological_features(protein_list, disgenet_api_key):
-    uniprot_df = get_uniprot(protein_list)
-    
-    entrez_ids = uniprot_df['entrez_id'].dropna().unique()
+            uni_proteins_df = pd.concat(uniprot_features, ignore_index=True)
 
-    disgenet_df = get_disgenet(entrez_ids, disgenet_api_key)
+            uni_proteins_df.to_csv(save_path, index=False)
 
-    uniprot_df['entrez_id'] = uniprot_df['entrez_id'].astype(str)
-    disgenet_df['entrez_id'] = disgenet_df['entrez_id'].astype(str)
+        return uni_proteins_df
+
+    def get_disgenet(self, api_key='37587e7d-5f2c-4434-a3c6-54fad187142b', save_path="disgenet_features.csv"):
         
-    protein_features = pd.merge(uniprot_df, disgenet_df, on='entrez_id', how='left')
+        base_url = "https://disgenet.com"
+        headers = {"api_key": api_key, "Accept": "application/json"}
 
-    return protein_features
+        disgenet_features = []
 
-GraphBuilder = PPIGraphBuilder()
-PPI__STRING_DF = GraphBuilder.get_stringdb_network()
+        for p in self.proteins:
+            disgenet_response = requests.get(f"{base_url}/{p}", headers=headers)
+                
+            disgenet_data = disgenet_response.json()
+            disgenet_results = disgenet_data.get("results", []) 
+            disgenet_df = pd.json_normalize(disgenet_results)
+            disgenet_features.append(disgenet_df )
 
-PPI_BIOGRID_DF = GraphBuilder.get_biogrid_network("BIOGRID-ALL-5.0.256.tab3.txt")
+            disgenet_proteins_df = pd.concat(disgenet_features, ignore_index=True)
+            disgenet_proteins_df.to_csv(save_path, index=False)
+        
+        return disgenet_proteins_df
 
-#merge string and biogrid
-PPI_COMBINED_DF = GraphBuilder.merge_networks(PPI__STRING_DF, PPI_BIOGRID_DF)
-proteins, protein_mapping = GraphBuilder.protein_extraction(PPI_COMBINED_DF)
+    def get_biological_features(self, protein_list, disgenet_api_key, save_path='protein_features.csv'):
+        uniprot_df = self.get_uniprot(protein_list)
+        
+        entrez_ids = uniprot_df['gene_id'].dropna().unique()
 
-proteins = list(proteins)
-proteins_features = get_uniprot(proteins[0:7])
-print(proteins_features.head())
+        disgenet_df = self.get_disgenet(entrez_ids, disgenet_api_key)
+
+        uniprot_df['gene_id'] = uniprot_df['gene_id'].astype(str)
+        disgenet_df['gene_id'] = disgenet_df['gene_id'].astype(str)
+            
+        protein_features = pd.merge(uniprot_df, disgenet_df, on='gene_id', how='left')
+
+        protein_features.to_csv(save_path, index=False)
+
+        return protein_features
+
+class feature_encoder:
+    def __init__(self, features_file='protein_features.csv'):
+        features_df = pd.read_csv(features_file)
+
+        self.features_df = features_df
