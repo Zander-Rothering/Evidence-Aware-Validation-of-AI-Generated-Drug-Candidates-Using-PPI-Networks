@@ -48,7 +48,7 @@ class PPIGraphBuilder:
         
         return PPI_df
         
-    def protein_extraction(self, df):
+    def protein_extraction(self, df, save_path= "proteins.txt"):
         # Extract all unique proteins in df
         proteinA = set(df['preferredName_A'])
         proteinB = set(df['preferredName_B'])
@@ -57,6 +57,10 @@ class PPIGraphBuilder:
         # Map proteins to create edges
         protein_mapping = {name: i for i, name in enumerate(proteins)}
 
+        with open(save_path, "w") as f:
+            for protein in sorted(proteins):
+                f.write(protein + "\n")
+                
         return proteins, protein_mapping
 
     def build_edges(self, df, mapping):
