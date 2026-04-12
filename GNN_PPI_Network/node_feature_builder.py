@@ -7,13 +7,16 @@ import torch
 from concurrent.futures import ThreadPoolExecutor
 
 class feature_extracter:
-    def __init__(self, protein_gene_file= "proteins.txt", url = "https://rest.uniprot.org/uniprotkb/search"):
+    def __init__(self, proteins= None, protein_gene_file= "proteins.txt", url = "https://rest.uniprot.org/uniprotkb/search"):
         """
         Initializes class with proteins by their gene name as a list from a text file
         """
-        # Converts text file of proteins gene names to list
-        with open(protein_gene_file, "r") as f:
-            protein_genes = [line.strip() for line in f if line.strip()] 
+        if proteins == None:
+            # Converts text file of proteins gene names to list
+            with open(protein_gene_file, "r") as f:
+                protein_genes = [line.strip() for line in f if line.strip()]
+        else:
+            protein_genes = proteins
         
         self.protein_genes = protein_genes
         
@@ -133,7 +136,7 @@ class feature_extracter:
         # Returns a numpy array of lists of GO strings for each protein
         return cleaned_uniprot_features
     
-    def node_features_encoder(self, input_path= 'uniprot_features.csv'):
+    def node_features_encoder(self, features_input):
         """
         Encodes cleaned uniprot features and turns them into a torch tensor for GNN training.
 
@@ -145,7 +148,10 @@ class feature_extracter:
                 Torch tensor of encoded uniprot features for GNN training
         """
         # Get clean uniprot features
-        cleaned_features = self.clean_uniprot_features(input_path)
+        if isinstance(features_input, str):
+            cleaned_features = self.clean_uniprot_features(input_path= features_input)
+        else:
+            cleaned_features = self.clean_uniprot_features(features_dataframe= features_input)
         
         # Encode GO IDs into binary matrix for each protein
         mlb = MultiLabelBinarizer()

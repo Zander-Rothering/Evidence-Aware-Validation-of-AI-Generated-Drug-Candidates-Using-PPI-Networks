@@ -1,13 +1,16 @@
 import pandas as pd
 import torch
 class node_labeler():
-    def __init__(self, protein_gene_file= "proteins.txt"):
+    def __init__(self, proteins= None, protein_gene_file= "proteins.txt"):
         """
         Initializes list of proteins by their gene name
         """
-        # Converts text file of proteins gene names to list
-        with open(protein_gene_file, "r") as f:
-            protein_genes = [line.strip() for line in f if line.strip()] 
+        if proteins == None:
+            # Converts text file of proteins gene names to list
+            with open(protein_gene_file, "r") as f:
+                protein_genes = [line.strip() for line in f if line.strip()]
+        else:
+            protein_genes = proteins
         
         self.protein_genes = protein_genes
 
@@ -27,7 +30,7 @@ class node_labeler():
 
         return disgenet_scores_df
 
-    def node_labels(self, disease_score_threshold=0.3):
+    def node_labels(self,  disease_score_threshold=0.3):
         """
         Creates label for GNN training.
         1 = Strong disease association (High Risk)
