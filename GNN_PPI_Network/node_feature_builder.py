@@ -4,17 +4,55 @@ import ast
 import numpy as np
 from sklearn.preprocessing import MultiLabelBinarizer
 import torch
+from concurrent.futures import ThreadPoolExecutor
 
 class feature_extracter:
-    def __init__(self, protein_gene_file= "proteins.txt"):
+    def __init__(self, protein_gene_file= "proteins.txt", url = "https://rest.uniprot.org/uniprotkb/search"):
         """
-        Initializes list of proteins by their gene name
+        Initializes class with proteins by their gene name as a list from a text file
         """
         # Converts text file of proteins gene names to list
         with open(protein_gene_file, "r") as f:
             protein_genes = [line.strip() for line in f if line.strip()] 
         
         self.protein_genes = protein_genes
+        
+        # Uniprot REST API url
+        self.url = url
+
+    def get_protein_gene(self, gene):
+        """
+        Fetch UniProt data for a single gene.
+
+        gene : string
+            Gene name of protein to extract data
+        """
+
+        query = f'gene_exact:"{gene}" AND organism_id:9606 AND reviewed:true'
+            
+        # Specify payload Uniprot will use to search
+        # Only extracts features that can be encoded to use for GNN training
+        # Returns json format
+        payload = {
+            'query': query,
+            'fields': 'accession,ft_domain,cc_subcellular_location,go',
+            'format': 'json'
+        }
+
+        # Uniprot response for each protein
+        uniprot_response = requests.get(self.url, params=payload, timeout=10)
+        # Raise error if issue with search
+        uniprot_response.raise_for_status()
+
+        # Uniprot response data
+        uniprot_data = uniprot_response.json()
+        # Extract results from Uniprot response data
+        uniprot_results = uniprot_data.get("results", []) 
+
+        # GO IDs under uniProtKBCrossReferences
+        uniprot_df = pd.json_normalize(uniprot_results)
+
+        return uniprot_df
 
     def get_uniprot(self, save_path= "uniprot_features.csv"):
         """
@@ -28,61 +66,33 @@ class feature_extracter:
             uni_features_df : Pandas DataFrame
                 DataFrame containing Uniprot features data for each protein by its gene name
         """
-        # Uniprot REST API url
-        url = "https://rest.uniprot.org/uniprotkb/search"
 
-        uniprot_features = []
+        # Parallel API requests
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            # List of protein features data
+            dfs = list(executor.map(self.fetch_gene, self.protein_genes))
 
-        # Loop through each proteins gene name
-        for g in self.protein_genes:
-            # Query Uniprot will use to search
-            # Organism ID corresponds to Homo Sapiens; Will only pull reviewed data
-            query = f'gene_exact:"{g}" AND organism_id:9606 AND reviewed:true'
-            
-            # Specify payload Uniprot will use to search
-            # Only extracts features that can be encoded to use for GNN training
-            # Returns json format
-            payload = {
-                'query': query,
-                'fields': 'accession,ft_domain,cc_subcellular_location,go',
-                'format': 'json'
-            }
+        # Concatenate proteins data lists to single DataFrame
+        uni_features_df = pd.concat(dfs, ignore_index=True)
 
-            # Uniprot response for each protein
-            uniprot_response = requests.get(url, params=payload)
-            # Raise error if issue with search
-            uniprot_response.raise_for_status()
-
-            # Uniprot response data
-            uniprot_data = uniprot_response.json()
-            # Extract results from Uniprot response data
-            uniprot_results = uniprot_data.get("results", []) 
-
-            # GO IDs under uniProtKBCrossReferences
-            uniprot_df = pd.json_normalize(uniprot_results)
-            uniprot_features.append(uniprot_df)
-
-            # Concatanate features to DataFrame
-            uni_features_df = pd.concat(uniprot_features, ignore_index=True)
-
-            # Save Uniprot features DataFrame as csv for later use
-            uni_features_df.to_csv(save_path, index=False)
+        # Save DataFrame as csv file after concatenating
+        uni_features_df.to_csv(save_path, index=False)
 
         return uni_features_df
-    
+
     def clean_uniprot_features(self, features_dataframe=None, input_path: str=None):
         """
-        Cleans extracted uniprot features data to get GO IDs only for encoding
+        Cleans extracted Uniprot features data to get GO IDs only for encoding
 
         Parameters:
             features_dataframe : pd DataFrame
                 DataFrame of uniprot features data as nested dictionaries
             input_path : string
-                File path to uniprot features csv file
+                File path to Uniprot features csv file
         
         Returns:
-            clnd_uniprot_ftrs : numpy array
-                Lists of GO IDs for each protein to use for encoding
+            cleaned_uniprot_features : np.array
+                Array of lists of GO IDs for each protein
         """
         # Check if file path was given if not use passed DataFrame
         if input_path is not None:
@@ -102,7 +112,7 @@ class feature_extracter:
             row = go_data[i]
 
             # Check if row is NaN or empty
-            if np.isnan(row) or row == "" or row == "[]":
+            if pd.isna(row) or row in ("", "[]"):
                 cleaned_uniprot_features[i] = np.array([])
                 continue
 
@@ -117,16 +127,19 @@ class feature_extracter:
         # Returns a numpy array of lists of GO strings for each protein
         return cleaned_uniprot_features
     
-    def node_features_encoder(self):
+    def node_features_encoder(self, input_path= 'uniprot_features.csv'):
         """
         Encodes cleaned uniprot features and turns them into a torch tensor for GNN training.
+
+            input_path : string
+                File path to Uniprot features csv file
 
         Returns:
             x_tensor : torch tensor
                 Torch tensor of encoded uniprot features for GNN training
         """
         # Get clean uniprot features
-        cleaned_features = self.clean_uniprot_features()
+        cleaned_features = self.clean_uniprot_features(input_path)
         
         # Encode GO IDs into binary matrix for each protein
         mlb = MultiLabelBinarizer()
@@ -136,43 +149,3 @@ class feature_extracter:
         x_tensor = torch.from_numpy(x_matrix).float()
 
         return x_tensor
-
-    def get_disgenet(self, api_key='37587e7d-5f2c-4434-a3c6-54fad187142b', save_path="disgenet_features.csv"):
-        
-        base_url = "https://disgenet.com"
-        headers = {"api_key": api_key, "Accept": "application/json"}
-
-        disgenet_features = []
-
-        for p in self.proteins:
-            disgenet_response = requests.get(f"{base_url}/{p}", headers=headers)
-                
-            disgenet_data = disgenet_response.json()
-            disgenet_results = disgenet_data.get("results", []) 
-            disgenet_df = pd.json_normalize(disgenet_results)
-            disgenet_features.append(disgenet_df )
-
-            disgenet_proteins_df = pd.concat(disgenet_features, ignore_index=True)
-            disgenet_proteins_df.to_csv(save_path, index=False)
-        
-        return disgenet_proteins_df
-
-    def clean_disgenet():
-        pass
-    """
-    def get_biological_features(self, protein_list, disgenet_api_key, save_path='protein_features.csv'):
-        uniprot_df = self.get_uniprot(protein_list)
-        
-        entrez_ids = uniprot_df['gene_id'].dropna().unique()
-
-        disgenet_df = self.get_disgenet(entrez_ids, disgenet_api_key)
-
-        uniprot_df['gene_id'] = uniprot_df['gene_id'].astype(str)
-        disgenet_df['gene_id'] = disgenet_df['gene_id'].astype(str)
-            
-        protein_features = pd.merge(uniprot_df, disgenet_df, on='gene_id', how='left')
-
-        protein_features.to_csv(save_path, index=False)
-
-        return protein_features
-    """
