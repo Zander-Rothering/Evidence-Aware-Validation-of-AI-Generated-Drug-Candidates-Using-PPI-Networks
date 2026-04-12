@@ -54,6 +54,9 @@ class PPIGraphBuilder:
         proteinB = set(df['preferredName_B'])
         proteins = proteinA.union(proteinB)
 
+        # Sort proteins to ensure order matches original proteins file
+        proteins = sorted(list(proteins))
+
         # Map proteins to create edges
         protein_mapping = {name: i for i, name in enumerate(proteins)}
 

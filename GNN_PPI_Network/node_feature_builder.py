@@ -52,6 +52,9 @@ class feature_extracter:
         # GO IDs under uniProtKBCrossReferences
         uniprot_df = pd.json_normalize(uniprot_results)
 
+        # Adding gene name column (used to ensure index order matches original proteins file)
+        uniprot_df['gene_name'] = gene
+
         return uniprot_df
 
     def get_uniprot(self, save_path= "uniprot_features.csv"):
@@ -99,6 +102,9 @@ class feature_extracter:
             df = pd.read_csv(input_path)
         else:
             df = features_dataframe
+
+        # Re-index DataFrame to ensure order matches original proteins file
+        df = df.set_index('gene_name').reindex(self.protein_genes).reset_index()
 
         # Extract GO IDs data column and convert to numpy array
         go_data = df['uniProtKBCrossReferences'].to_numpy()
