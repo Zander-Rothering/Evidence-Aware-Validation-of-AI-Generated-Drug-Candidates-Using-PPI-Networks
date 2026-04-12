@@ -2,34 +2,6 @@ import torch
 import stringdb
 import pandas as pd
 
-#2stringdb.api.get_network(identifiers, species=9606, required_score=400, caller_identity='https://github.com/gpp-rnd/stringdb', add_nodes=0)[source]¶
-#Get the ppi network for a list of string ids
-
-#Parameters:	
-#identifiers (list) – list of string ids
-#species (int, optional) – species NCBI identifier
-#required_score (int, optional) – score cutoff for edges, corresponds to probability of belonging to same kegg pathway (0 -1000) 400 is medium confidence
-#caller_identity (str, optional) – personal identifier for string
-#add_nodes (int, optional) – number of nodes to add to the network based on confidence
-#Returns:	
-#network edges
-
-# Output (Dataframe) 
-#stringId_A stringId_B preferredName_A preferredName_B  ncbiTaxonId  score  nscore  fscore  pscore  ascore  escore  dscore  tscore
-
-#stringId_A: Internal STRING identifier for protein
-#stringId_B: Internal STRING identifier for protein 
-#preferredName_A: Common name of protein in interaction 
-#preferredName_B: Common name of protein in interaction   
-#ncbiTaxonId: Taxonomy identifier for the species (9606 for Humans) 
-#score: Probabilistic measure of how likely the interaction is to be true  
-#nscore: (Neighbor) Computed from the proximity of genes on the genome (inter-gene nucleotide count).  
-#fscore: (Fusion) Derived from proteins that are fused into a single polypeptide chain in other species.
-#pscore: (Co-occurrence) Derived from similar absence or presence patterns of genes across different species.
-#ascore: (Co-expression) Based on similar patterns of mRNA expression (e.g., from microarrays or RNA-seq).
-#escore: (Experimental) Derived from high-throughput lab data like affinity chromatography or yeast two-hybrid screens.
-#dscore: (Database) Extracted from curated knowledge in other public databases (e.g., KEGG, Reactome).
-#tscore: (Textmining) Derived from the statistical co-occurrence of protein names in scientific abstracts (PubMed).
 class PPIGraphBuilder:
     """
     
@@ -47,45 +19,6 @@ class PPIGraphBuilder:
                                       add_nodes= self.add_nodes)
         
         return PPI_df
-        
-    def protein_extraction(self, df, save_path= "proteins.txt"):
-        # Extract all unique proteins in df
-        proteinA = set(df['preferredName_A'])
-        proteinB = set(df['preferredName_B'])
-        proteins = proteinA.union(proteinB)
-
-        # Sort proteins to ensure order matches original proteins file
-        proteins = sorted(list(proteins))
-
-        # Map proteins to create edges
-        protein_mapping = {name: i for i, name in enumerate(proteins)}
-
-        with open(save_path, "w") as f:
-            for protein in sorted(proteins):
-                f.write(protein + "\n")
-                
-        return proteins, protein_mapping
-
-    def build_edges(self, df, mapping):
-        """Create edge_index tensor."""
-        # Source proteins
-        src = [mapping[name] for name in df['preferredName_A']]
-
-        # Destination protein
-        dst = [mapping[name] for name in df['preferredName_B']]
-
-        # Undirected torch tensor of edges
-        edge_index = torch.tensor([src + dst, dst + src], dtype=torch.long)
-
-        return edge_index
-
-    def edge_weights(self, df):
-        """Create edge weights to be stored as edge_attributes"""
-        # Normalize edge weights to between 0-1
-        scores = df['score'].values / 1000.0
-        # Torch tensor of scores to be used as edge attributes
-        edge_weights = torch.tensor(list(scores) * 2, dtype=torch.float)
-        return edge_weights
     
     def get_biogrid_network(self, biogrid_file_path, target_protein="HMGCR"):
         """Load BioGRID data and filter for HMGCR interactions."""
@@ -121,7 +54,46 @@ class PPIGraphBuilder:
         )
     
         return combined
+    
+    def protein_extraction(self, df, save_path= "proteins.txt"):
+        # Extract all unique proteins in df
+        proteinA = set(df['preferredName_A'])
+        proteinB = set(df['preferredName_B'])
+        proteins = proteinA.union(proteinB)
 
+        # Sort proteins to ensure order matches original proteins file
+        proteins = sorted(list(proteins))
+
+        # Map proteins to create edges
+        protein_mapping = {name: i for i, name in enumerate(proteins)}
+
+        with open(save_path, "w") as f:
+            for protein in sorted(proteins):
+                f.write(protein + "\n")
+                
+        return proteins, protein_mapping
+    
+    def build_edges(self, df, mapping):
+        """Create edge_index tensor."""
+        # Source proteins
+        src = [mapping[name] for name in df['preferredName_A']]
+
+        # Destination protein
+        dst = [mapping[name] for name in df['preferredName_B']]
+
+        # Undirected torch tensor of edges
+        edge_index = torch.tensor([src + dst, dst + src], dtype=torch.long)
+
+        return edge_index
+
+    def edge_weights(self, df):
+        """Create edge weights to be stored as edge_attributes"""
+        # Normalize edge weights to between 0-1
+        scores = df['score'].values / 1000.0
+        # Torch tensor of scores to be used as edge attributes
+        edge_weights = torch.tensor(list(scores) * 2, dtype=torch.float)
+        return edge_weights
+"""
 GraphBuilder = PPIGraphBuilder()
 PPI__STRING_DF = GraphBuilder.get_stringdb_network()
 #adding Biogrid part
@@ -142,3 +114,4 @@ print(f"STRING edges: {len(PPI__STRING_DF)}")
 print(f"BioGRID edges: {len(PPI_BIOGRID_DF)}")
 print(f"Combined edges after dedup: {len(PPI_COMBINED_DF)}")
 print(f"Total unique proteins: {len(proteins)}")
+"""
