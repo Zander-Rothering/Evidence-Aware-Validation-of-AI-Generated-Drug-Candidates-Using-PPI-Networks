@@ -3,25 +3,25 @@
 Not yet fully implemented. Hardcoded now for `ner_extractor.py` quick test.
 """
 
-# will implement this later
-# from Bio import Entrez
-# Entrez.email = "example@email.com"
-# handle = Entrez.esearch(db="pubmed", term=query)
 
 class PubMedSearcher:
     """Search PubMed and retrieve abstracts using NCBI Entrez."""
 
-    def __init__(self, max_results: int = 20) -> None:
-        # TODO: set up Entrez.email
+    def __init__(self, max_results: int = 20, email: str = "") -> None:
+        from Bio import Entrez
+        Entrez.email = email
         self.max_results = max_results
+        self.entrez = Entrez
 
     def search(self, search_terms: str, sider_risks: list[str] = None, target: str = "HMGCR") -> dict:
-        # TODO: combine search_terms + target into query
-        #       call Entrez.esearch -> get pmids
-        #       call Entrez.efetch  -> get abstract texts
-        #       fall back through 4 query levels if results are sparse
-        #       return {"pmids": [...], "abstracts": [...], "evidence_source": "level_0"}
-        pass
+        # 4 fallback query levels, from most specific to least
+        queries = [
+            f"{search_terms} {target}",                         # level 0: compound + target
+            f"{search_terms} statin HMGCR inhibitor",           # level 1: scaffold + target
+            f"statin HMGCR inhibitor safety adverse effects",   # level 2: drug class + target
+            f"HMGCR inhibitor adverse effects",                 # level 3: target only
+        ]
+        
 
 
 # Hard_coded quick test data so we can try ner_extractor without calling the real API
