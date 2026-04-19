@@ -9,7 +9,7 @@ from ppi_graph_builder import PPIGraphBuilder
 from graph_trainer import GNNtrainer
 
 class gnn_agent():
-    def __init__(self):
+    def __init__(self, best_model_path= None):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         builder = PPIGraphBuilder()
@@ -31,7 +31,8 @@ class gnn_agent():
         self.data = data.to(self.device)
         
         model = GNNModel(in_channels=data.num_node_features, hidden_channels=128, out_classes=2)
-        self.model = model.to(self.device)
+        if best_model_path is not None:
+            self.model.load_state_dict(torch.load(best_model_path, map_location=self.device))
 
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
         loss_function = nn.CrossEntropyLoss()
@@ -40,7 +41,7 @@ class gnn_agent():
         self.trainer = trainer
 
     def train_model(self, epochs=1000):
-        self.trainer.fit(self.data, epochs=epochs)
+        self.trainer.test_model(self.data, epochs=epochs)
     
-Agent = gnn_agent()
+Agent = gnn_agent(best_model_path= None)
 Agent.train_model(epochs= 16)
