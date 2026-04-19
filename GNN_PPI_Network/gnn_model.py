@@ -126,7 +126,7 @@ class GNNModel(nn.Module):
         self.classifier = Linear(hidden_channels, out_classes)
 
         # Dropout layer: Sets some inputs to 0 to reduce overfitting
-        self.dropout = dropout
+        self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x, edge_index):
         """
@@ -147,17 +147,17 @@ class GNNModel(nn.Module):
         # First layer propogation
         x = self.gnn1(x, edge_index)
         x = F.relu(x) # Activation function
-        x = F.dropout(x, p=self.dropout, training=self.training) #Dropout layer
+        x = self.dropout(x) #Dropout layer
 
         # Second layer propogation
         x = self.gnn2(x, edge_index)
         x = F.relu(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = self.dropout(x)
 
         # Third layer propogation
         x = self.gnn3(x, edge_index)
         x = F.relu(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = self.dropout(x)
 
         # Performs classification of each node
         logits = self.classifier(x)

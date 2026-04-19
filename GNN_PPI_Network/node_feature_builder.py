@@ -76,7 +76,7 @@ class feature_extracter:
         # Parallel API requests
         with ThreadPoolExecutor(max_workers=10) as executor:
             # List of protein features data
-            dfs = list(executor.map(self.fetch_gene, self.protein_genes))
+            dfs = list(executor.map(self.get_protein_gene, self.protein_genes))
 
         # Concatenate proteins data lists to single DataFrame
         uni_features_df = pd.concat(dfs, ignore_index=True)
@@ -102,36 +102,71 @@ class feature_extracter:
         """
         # Check if file path was given if not use passed DataFrame
         if input_path is not None:
-            df = pd.read_csv(input_path)
+            cleaned_uniprot_features = pd.read_csv(input_path)
         else:
-            df = features_dataframe
+            cleaned_uniprot_features = features_dataframe.copy()
 
-        # Re-index DataFrame to ensure order matches original proteins file
-        df = df.set_index('gene_name').reindex(self.protein_genes).reset_index()
+        # Pre-allocate space for GO features
+        df_len = len(cleaned_uniprot_features)
 
-        # Extract GO IDs data column and convert to numpy array
-        go_data = df['uniProtKBCrossReferences'].to_numpy()
-        
-        # Pre-allocate array to store GO IDs lists
-        cleaned_uniprot_features = np.empty(len(go_data), dtype=object)
-        
-        # Loop through go_data
-        for i in range(len(go_data)):
-            # Get current row
-            row = go_data[i]
+        go_features_array = np.empty(df_len, dtype=object)
+
+        # Parse GO Features
+        col = cleaned_uniprot_features['uniProtKBCrossReferences'].values
+
+        for i in range(df_len):
+            # Get uniProtKBCrossReferences for current row
+            row = col[i]
 
             # Check if row is NaN or empty
-            if pd.isna(row) or row in ("", "[]"):
-                cleaned_uniprot_features[i] = np.array([])
+            # Empty if no GO features
+            if row is None:
+                go_features_array[i] = []
                 continue
 
-            # Converts row strings into list of dictionaries to parse GO IDs from       
-            row_items = ast.literal_eval(row)
-            # Parse GO IDs from row
-            go_ids = np.array([item['id'] for item in row_items if item.get('database') == 'GO'])
-                
-            # Add go_ids array to pre-allocated features array
-            cleaned_uniprot_features[i] = go_ids
+            if isinstance(row, float) and pd.isna(row):
+                go_features_array[i] = []
+                continue
+
+            if isinstance(row, (list, np.ndarray)):
+                row_items = row
+            else:
+                row_str = str(row)
+
+                if row_str.strip() in ("", "[]"):
+                    go_features_array[i] = []
+                    continue
+            
+            try:
+                # Converts row strings into list of dictionaries to parse GO IDs from 
+                row_items = ast.literal_eval(row)
+            except (ValueError, SyntaxError):
+                # Empty if error
+                go_features_array[i] = []
+                continue
+            
+            go_ids = []
+            for item in row_items:
+                # Parse GO IDs from row
+                if isinstance(item, dict) and item.get('database') == 'GO':
+                    go_ids.append(item.get('id'))
+            # Add GO Ids for row to features array
+            go_features_array[i] = go_ids
+
+        # Add GO Features back to dataframe
+        cleaned_uniprot_features['go_terms'] = go_features_array
+
+        # If duplicates genes merge
+        cleaned_uniprot_features = (cleaned_uniprot_features.groupby('gene_name')['go_terms'].apply(lambda lists: list(set(sum(lists, [])))).reset_index())
+
+        # Reindex to algin gene name with graph node ordering
+        cleaned_uniprot_features = cleaned_uniprot_features.set_index('gene_name').reindex(self.protein_genes)
+
+        # Add empty list ofor any empty genes
+        cleaned_uniprot_features['go_terms'] = cleaned_uniprot_features['go_terms'].apply(lambda x: x if isinstance(x, list) else [])
+        
+        # Reset index
+        cleaned_uniprot_features = cleaned_uniprot_features.reset_index()
 
         # Returns a numpy array of lists of GO strings for each protein
         return cleaned_uniprot_features
@@ -149,13 +184,16 @@ class feature_extracter:
         """
         # Get clean uniprot features
         if isinstance(features_input, str):
-            cleaned_features = self.clean_uniprot_features(input_path= features_input)
+            cleaned_features = self.clean_uniprot_features(input_path = features_input)
         else:
-            cleaned_features = self.clean_uniprot_features(features_dataframe= features_input)
+            cleaned_features = self.clean_uniprot_features(features_dataframe = features_input)
         
+        # Extract GO features
+        go_data = cleaned_features['go_terms'].values
+
         # Encode GO IDs into binary matrix for each protein
         mlb = MultiLabelBinarizer()
-        x_matrix = mlb.fit_transform(cleaned_features)
+        x_matrix = mlb.fit_transform(go_data)
 
         # Transform matrix of encoded features to a torch tensor for GNN
         x_tensor = torch.from_numpy(x_matrix).float()
