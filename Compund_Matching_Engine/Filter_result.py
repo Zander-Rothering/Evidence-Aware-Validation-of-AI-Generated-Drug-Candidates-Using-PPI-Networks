@@ -1,58 +1,49 @@
+"""Filter_result.py — container for drug-likeness filter outputs (Part 1, Steps A6/A7)."""
+from dataclasses import dataclass, field
+from typing import List
 
-#Run PAINS and Brenk Substructure Filters
 
-
-
+@dataclass
 class FilterResult:
+    """Holds PAINS/Brenk flags and Lipinski descriptor values for one compound."""
 
-    def __init__(
-        self,
+    # PAINS / Brenk flags (A6)
+    pains_flag: bool = False
+    brenk_flag: bool = False
+    matches: List[str] = field(default_factory=list)   # names of matched alert patterns
+    is_clean: bool = True                               # True iff both flags are False
 
-        # ── Activity 6 — PAINS and Brenk ─────────────────────
-        pains_flag:          bool,   # True = PAINS pattern found
-        brenk_flag:          bool,   # True = Brenk pattern found
-        pains_matches:       list,   # names of matched PAINS patterns
-        brenk_matches:       list,   # names of matched Brenk patterns
-        is_clean:            bool,   # True only if both flags False
+    # Lipinski descriptors (A7)
+    mw: float = 0.0
+    logp: float = 0.0
+    hbd: int = 0
+    hba: int = 0
+    violations: int = 0   # Lipinski violations (0–4); >=2 → HIGH risk
+    qed: float = 0.0      # <0.34 on a MEDIUM result → escalates to HIGH
+    tpsa: float = 0.0
+    rot_bonds: int = 0
 
-        # ── Activity 7 — Lipinski descriptors ────────────────
-        mol_weight:          float,  # molecular weight in Da
-        logp:                float,  # lipophilicity
-        hbd:                 int,    # hydrogen bond donors
-        hba:                 int,    # hydrogen bond acceptors
-        lipinski_violations: int,    # count of failed RO5 rules
+    # Aggregated verdict contributed to ML feature vector
+    lipinski_pass: bool = True   # violations == 0
 
-        # ── Activity 7 — QED and supporting descriptors ──────
-        qed:                 float,  # drug-likeness score 0 to 1
-        tpsa:                float,  # topological polar surface area
-        rotatable_bonds:     int,    # molecular flexibility measure
+    def to_ml_features(self) -> dict:
+        """Return flat dict for Random Forest feature assembly."""
+        return {
+            "pains_flag":    int(self.pains_flag),
+            "brenk_flag":    int(self.brenk_flag),
+            "mw":            self.mw,
+            "logp":          self.logp,
+            "hbd":           self.hbd,
+            "hba":           self.hba,
+            "violations":    self.violations,
+            "qed":           self.qed,
+            "tpsa":          self.tpsa,
+            "rot_bonds":     self.rot_bonds,
+            "lipinski_pass": int(self.lipinski_pass),
+        }
 
-    ):
-        # ── Activity 6 fields ─────────────────────────────────
-        self.pains_flag          = pains_flag
-        self.brenk_flag          = brenk_flag
-        self.pains_matches       = pains_matches
-        self.brenk_matches       = brenk_matches
-        self.is_clean            = is_clean
-
-        # ── Activity 7 fields ─────────────────────────────────
-        self.mol_weight          = mol_weight
-        self.logp                = logp
-        self.hbd                 = hbd
-        self.hba                 = hba
-        self.lipinski_violations = lipinski_violations
-        self.qed                 = qed
-        self.tpsa                = tpsa
-        self.rotatable_bonds     = rotatable_bonds
-
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
-            f"FilterResult("
-            f"is_clean={self.is_clean}, "
-            f"pains={self.pains_flag}, "
-            f"brenk={self.brenk_flag}, "
-            f"lipinski_violations={self.lipinski_violations}, "
-            f"qed={self.qed:.2f}, "
-            f"mw={self.mol_weight:.1f}, "
-            f"logp={self.logp:.2f})"
+            f"FilterResult(pains={self.pains_flag}, brenk={self.brenk_flag}, "
+            f"viol={self.violations}, qed={self.qed:.3f}, clean={self.is_clean})"
         )

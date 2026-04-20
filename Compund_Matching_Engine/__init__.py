@@ -1,29 +1,48 @@
+"""
+compound_matching — Part 1: Compound Matching Engine
+=====================================================
 
-# Loads all classes and libraries for Step 1
-# Import this file and everything in Step 1 is available
+Public API
+----------
+    from compound_matching import MatchingEngine, MatchResult
 
-# ── External Libraries ────────────────────────────────────────
+    engine = MatchingEngine()                  # loads ChEMBL references at startup
+    result: MatchResult = engine.run(smiles)   # full A2–A9 pipeline
 
-# RDKit — all molecular chemistry operations
-from rdkit import Chem                          # SMILES parsing
-from rdkit.Chem import AllChem                  # Morgan fingerprints
-from rdkit.Chem import Descriptors              # MW, LogP, TPSA
-from rdkit.Chem import QED                      # drug-likeness score
-from rdkit.Chem import rdFMCS                   # MCS scaffold comparison
-from rdkit.Chem import DataStructs              # Tanimoto similarity
-from rdkit.Chem import FilterCatalog            # PAINS / Brenk filters
-from rdkit.Chem import FilterCatalogParams      # filter catalog builder
-from rdkit.Chem.Scaffolds import MurckoScaffold # core scaffold extraction
-from rdkit.Chem import Draw                     # 2D structure images
-from rdkit.Chem import rdMolDescriptors         # HBD, HBA, rotatable bonds
+Class index
+-----------
+    MatchingEngine      matching_engine.py      Part 1 orchestrator (A2–A9)
+    CompoundLoader      compound_loader.py      ChEMBL / fallback reference set (A4)
+    FingerprintEncoder  fingerprint_encoder.py  2048-bit Morgan encoder (A3)
+    SimilarityScorer    Similarity_scorer.py    Tanimoto NN search + ML scorer (A5)
+    DrugLikenessFilter  Drug_likeness_filter.py PAINS / Brenk / Lipinski (A6, A7)
+    ScaffoldExtractor   Scaffold_extractor.py   Murcko scaffold comparison (A8)
+    NoveltyChecker      novelty_checker.py      Training-set novelty flag (A9)
+    StructureVisualiser structure_visualiser.py 2-D structure rendering
+    MatchResult         Match_result.py         Part 1 output container → Part 3
+    FilterResult        Filter_result.py        Drug-likeness sub-result
+"""
 
-# ChEMBL — reference compound database
-from chembl_webresource_client.new_client import new_client  # ChEMBL API
+from .matching_engine import parse_smiles
+from .compound_loader import CompoundLoader
+from .fingerprint_encoder import FingerprintEncoder
+from .Similarity_scorer import SimilarityScorer, SimilarityResult
+from .Drug_likeness_filter import DrugLikenessFilter
+from .Scaffold_extractor import ScaffoldExtractor, ScaffoldResult
+from .structure_visualizer import StructureVisualiser
+from .Match_result import MatchResult
+from .Filter_result import FilterResult
 
-# Standard Python libraries
-import numpy as np        # fingerprint array operations
-import pandas as pd       # compound data as dataframes
-import requests           # HTTP fallback for API calls
-import logging            # error and status logging
-import json               # parsing API responses
-import os                 # file path operations
+__all__ = [
+    "parse_smiles",
+    "CompoundLoader",
+    "FingerprintEncoder",
+    "SimilarityScorer",
+    "SimilarityResult",
+    "DrugLikenessFilter",
+    "ScaffoldExtractor",
+    "ScaffoldResult",
+    "StructureVisualiser",
+    "MatchResult",
+    "FilterResult",
+]
