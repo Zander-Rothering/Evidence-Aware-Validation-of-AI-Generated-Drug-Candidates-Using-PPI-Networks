@@ -15,10 +15,10 @@ dependencies:
   - pytorch-cuda=12.1
   - pyg
   - torch-geometric
-  - torch-scatter
-  - torch-sparse
-  - torch-cluster
-  - torch-spline-conv
+  - pytorch-scatter
+  - pytorch-sparse
+  - pytorch-cluster
+  - pytorch-spline-conv
   - rdkit
   - pandas
   - numpy
