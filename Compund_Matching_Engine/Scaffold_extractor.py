@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from rdkit import Chem
 from rdkit.Chem.Scaffolds import MurckoScaffold
-from rdkit.Chem import rdFingerprintGenerator
+from rdkit.Chem import rdFingerprintGenerator, rdFMCS
 from rdkit import DataStructs
 
 
@@ -13,6 +13,8 @@ class ScaffoldResult:
     query_scaffold: str = ""
     nn_scaffold: str = ""
     shared_atoms: int = 0
+    novel_atoms: int = 0
+    shared_pct: float = 0.0
     scaffold_similarity: float = 0.0   # Tanimoto of scaffold Morgan fps
 
 
@@ -30,17 +32,49 @@ class ScaffoldExtractor:
         )
 
     # ------------------------------------------------------------------
-    def _to_scaffold(self, mol: Chem.Mol) -> Chem.Mol | None:
+    def extract_murcko(self, mol: Chem.Mol) -> Chem.Mol | None:
+        """Return the Murcko scaffold mol for `mol`, or None on failure."""
         try:
             return MurckoScaffold.GetScaffoldForMol(mol)
         except Exception:
             return None
 
-    def _scaffold_smiles(self, mol: Chem.Mol) -> str:
-        sca = self._to_scaffold(mol)
+    def murcko_smiles(self, mol: Chem.Mol) -> str:
+        """Return canonical SMILES of the Murcko scaffold for `mol`."""
+        sca = self.extract_murcko(mol)
         if sca is None:
             return ""
         return Chem.MolToSmiles(sca, isomericSmiles=False)
+
+    def compare(self, candidate_mol: Chem.Mol, neighbour_mol: Chem.Mol) -> dict:
+        """
+        MCS comparison of the two Murcko scaffolds.
+
+        Returns
+        -------
+        dict with:
+            shared_atoms : int   — atoms in the maximum common substructure
+            novel_atoms  : int   — candidate scaffold atoms not in the MCS
+            shared_pct   : float — shared_atoms / candidate scaffold heavy atoms
+        """
+        q = self.extract_murcko(candidate_mol)
+        n = self.extract_murcko(neighbour_mol)
+
+        if q is None or n is None or q.GetNumHeavyAtoms() == 0 or n.GetNumHeavyAtoms() == 0:
+            return {"shared_atoms": 0, "novel_atoms": 0, "shared_pct": 0.0}
+
+        try:
+            mcs = rdFMCS.FindMCS([q, n], timeout=5)
+            shared = mcs.numAtoms if mcs and not mcs.canceled else 0
+        except Exception:
+            shared = 0
+
+        q_size = q.GetNumHeavyAtoms()
+        return {
+            "shared_atoms": shared,
+            "novel_atoms":  q_size - shared,
+            "shared_pct":   shared / q_size if q_size else 0.0,
+        }
 
     def _fingerprint(self, mol: Chem.Mol):
         return self._gen.GetFingerprint(mol)
@@ -59,8 +93,8 @@ class ScaffoldExtractor:
         """
         result = ScaffoldResult()
 
-        q_sca_mol = self._to_scaffold(query_mol)
-        n_sca_mol = self._to_scaffold(nn_mol)
+        q_sca_mol = self.extract_murcko(query_mol)
+        n_sca_mol = self.extract_murcko(nn_mol)
 
         result.query_scaffold = (
             Chem.MolToSmiles(q_sca_mol, isomericSmiles=False) if q_sca_mol else ""
@@ -69,11 +103,11 @@ class ScaffoldExtractor:
             Chem.MolToSmiles(n_sca_mol, isomericSmiles=False) if n_sca_mol else ""
         )
 
-        # shared heavy atoms between the two scaffolds
-        if q_sca_mol and n_sca_mol:
-            q_atoms = set(a.GetAtomMapNum() for a in q_sca_mol.GetAtoms())
-            n_atoms = set(a.GetAtomMapNum() for a in n_sca_mol.GetAtoms())
-            result.shared_atoms = q_sca_mol.GetNumHeavyAtoms()  # conservative proxy
+        if q_sca_mol and n_sca_mol and q_sca_mol.GetNumHeavyAtoms() > 0:
+            cmp = self.compare(query_mol, nn_mol)
+            result.shared_atoms = cmp["shared_atoms"]
+            result.novel_atoms  = cmp["novel_atoms"]
+            result.shared_pct   = cmp["shared_pct"]
 
             q_fp = self._fingerprint(q_sca_mol)
             n_fp = self._fingerprint(n_sca_mol)
@@ -87,5 +121,5 @@ class ScaffoldExtractor:
         mol = Chem.MolFromSmiles(smiles.strip())
         if mol is None:
             return ""
-        return self._scaffold_smiles(mol)
+        return self.murcko_smiles(mol)
 
