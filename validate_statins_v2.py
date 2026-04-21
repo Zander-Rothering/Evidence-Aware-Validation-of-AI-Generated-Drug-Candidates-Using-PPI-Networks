@@ -15,6 +15,7 @@ Output:
 """
 
 import argparse
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -28,6 +29,10 @@ ROOT       = Path(__file__).parent
 GEN_DIR    = ROOT / "generation_run"
 CHEMBL_CSV = ROOT / "datasets" / "statin_filtered.csv"
 
+# Marketed-statin reference set lives in EDA/ as the single source of truth.
+sys.path.insert(0, str(ROOT / "EDA"))
+from marketed_statins import MARKETED_STATINS  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Pharmacophore SMARTS -- HMG-mimetic warhead
 # (Same patterns as EDA/filter_chembl_statins.py; reproduced here so this
@@ -38,19 +43,10 @@ SMARTS_LACTONE   = "O=C1O[CX4;H1,H2][CX4;H2][CX4;H1]([OH])[CX4;H2]1"
 PHARMACOPHORE = [Chem.MolFromSmarts(SMARTS_OPEN_ACID),
                  Chem.MolFromSmarts(SMARTS_LACTONE)]
 
-# ---------------------------------------------------------------------------
-# Marketed statins (canonical, no stereo -- Morgan FP ignores stereo by default
-# so this is fine for similarity scoring vs the no-stereo generated set)
-# ---------------------------------------------------------------------------
-MARKETED = {
-    "atorvastatin":  "CC(C)c1c(C(=O)Nc2ccccc2)c(-c2ccc(F)cc2)n(CCC(O)CC(O)CC(=O)O)c1-c1ccccc1",
-    "rosuvastatin":  "CC(C)c1nc(N(C)S(C)(=O)=O)nc(-c2ccc(F)cc2)c1C=CC(O)CC(O)CC(=O)O",
-    "simvastatin":   "CCC(C)(C)C(=O)OC1CC(C)C=C2C=CC(C)C(CCC3CC(O)CC(=O)O3)C12",
-    "pravastatin":   "CCC(C)C(=O)OC1CC(O)C=C2C=CC(C)C(CCC(O)CC(O)CC(=O)O)C12",
-    "fluvastatin":   "OC(=O)CC(O)CC(O)C=Cc1c(C(C)C)n(Cc2ccc(F)cc2)c2ccccc12",
-    "pitavastatin":  "OC(=O)CC(O)CC(O)C=Cc1c(-c2ccccc2)c2ccccc2nc1C1CC1",
-    "lovastatin":    "CCC(C)C(=O)OC1CC(C)C=C2C=CC(C)C(CCC3CC(O)CC(=O)O3)C12",
-}
+# Marketed statins -- imported above from EDA/marketed_statins.py (verified
+# against PubChem PUG REST). Aliased for backward-compat with the rest of this
+# script.
+MARKETED = MARKETED_STATINS
 
 
 def warhead_match(mol: Chem.Mol) -> bool:

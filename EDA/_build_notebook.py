@@ -380,7 +380,9 @@ cells.append(md("""
 - **Validity (5.7%)** is low but expected on a tiny corpus (51 compounds × ~15 augmented variants). The model preserves chemical-grammar competence from the warm start, then specializes to statin scaffolds.
 - **Of 276 novel candidates, 59 (21.4%) pass all 4 filters.** The dominant failure mode is missing the HMG-mimetic warhead (only 22% retain it after random sampling).
 - **PAINS clean rate = 100%** for the novel-T=1.0 set — the corpus inherited none of the canonical pan-assay liabilities, and the model didn't invent any either.
-- **Top hit T=0.55 vs rosuvastatin** for `Cc1c(C=CC(O)CC(O)CC(=O)O)nc(-c2ccc(F)cc2)c(C)c1C(C)C` — a clean novel pyridine-core statin with the canonical fluoroaryl decoration and dihydroxy acid tail.
+- **Top hit T=0.58 vs atorvastatin** for `CC(=O)c1c(F)c(-c2ccc(F)cc2)c(-c2ccc(F)cc2)n1CCC(O)CC(O)CC(=O)O` — a clean novel pyrrole-core statin with a trifluoroaryl decoration and the canonical dihydroxy-acid tail.
+- **Nearest-statin distribution** skews strongly toward *rosuvastatin* and *fluvastatin* in the top 16: those two scaffolds dominate the model's "easy wins" because their linear heptenoic-acid tails are especially common in the training corpus.
+- **Reference SMILES** for the 7 marketed statins are verified against PubChem PUG REST and live in `EDA/marketed_statins.py` as the single source of truth (see `EDA/_verify_marketed_statins.py` for the re-runnable verifier).
 """))
 
 # ----------------------------------------------------------------------------
