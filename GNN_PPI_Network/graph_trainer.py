@@ -2,10 +2,15 @@ import torch
 import torch.nn as nn
 from torch_geometric.transforms import RandomLinkSplit
 
+
 class GNNtrainer:
-    def __init__(self, model, optimizer, loss_function, device= None):
+    """
+    Trainer for GNN node classification.
+    """
+
+    def __init__(self, model, optimizer, loss_function, device=None):
         """
-        Trainer for GNN node classification.
+        Initializes GNN Trainer
 
         Parameters:
             model : nn.Module
@@ -20,9 +25,13 @@ class GNNtrainer:
         self.model = model
         self.optimizer = optimizer
         self.loss_function = loss_function
-        self.device = device if device is not None else torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = (
+            device
+            if device is not None
+            else torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        )
 
-        self.model.to(self.device) # Moves model to device
+        self.model.to(self.device)  # Moves model to device
 
     def data_train_test_split(self, data, train_split=0.7, val_split=0.1):
         """
@@ -45,7 +54,7 @@ class GNNtrainer:
         # Randomize the nodes index
         random_nodes = torch.randperm(num_nodes)
 
-        # Get splits 
+        # Get splits
         train_split_end = int(train_split * num_nodes)
         val_split_end = int((train_split + val_split) * num_nodes)
 
@@ -53,19 +62,21 @@ class GNNtrainer:
         train_idx = random_nodes[:train_split_end]
         val_idx = random_nodes[train_split_end:val_split_end]
         test_idx = random_nodes[val_split_end:]
-        
+
         # Create masks for data split
         data.train_mask = torch.zeros(num_nodes, dtype=torch.bool)
         data.val_mask = torch.zeros(num_nodes, dtype=torch.bool)
         data.test_mask = torch.zeros(num_nodes, dtype=torch.bool)
 
         # Fill masks with true for each masks index group
-        data.train_mask[train_idx] = True # All train index nodes have train mask of true
+        data.train_mask[train_idx] = (
+            True  # All train index nodes have train mask of true
+        )
         data.val_mask[val_idx] = True
         data.test_mask[test_idx] = True
 
         return data
-    
+
     def train(self, data):
         """
         Trains GNN
@@ -73,13 +84,13 @@ class GNNtrainer:
         Parameters:
             data : Tensor
                 Data object describing graph
-        
+
         Returns:
             loss : Scalar
                 Model loss
         """
         self.model.train()
-        self.optimizer.zero_grad() # Clears previous gradient
+        self.optimizer.zero_grad()  # Clears previous gradient
 
         # Moves data to device
         x = data.x.to(self.device)
@@ -87,14 +98,14 @@ class GNNtrainer:
         y = data.y.to(self.device)
         mask = data.train_mask.to(self.device)
 
-        out = self.model(x, edge_index) # Forward pass, out = logits
-        loss = self.loss_function(out[mask], y[mask]) # Calculates loss
+        out = self.model(x, edge_index)  # Forward pass, out = logits
+        loss = self.loss_function(out[mask], y[mask])  # Calculates loss
 
-        loss.backward() # Computes gradient (backpropagation)
-        self.optimizer.step() # Applies gradient updates to weights
+        loss.backward()  # Computes gradient (backpropagation)
+        self.optimizer.step()  # Applies gradient updates to weights
 
-        return loss.item() # Returns loss as scaler
-    
+        return loss.item()  # Returns loss as scaler
+
     def evaluate(self, data, eval_mask="val"):
         """
         Performs evaluation of model by calculating loss and accuracy of model
@@ -104,7 +115,7 @@ class GNNtrainer:
                 Data object describing graph
             eval_mask : str
                 Split of data to use for evaluation
-            
+
         Returns:
             loss : Scalar
                 Model loss
@@ -151,7 +162,7 @@ class GNNtrainer:
                 Data object describing graph
             epochs : ints
                 Number of epochs to train the data for
-            
+
         Returns:
             test_loss : float
                 Model test loss
@@ -191,4 +202,3 @@ class GNNtrainer:
         print(f"Test Accuracy: {test_accuracy:.4f}")
 
         return test_loss, test_accuracy
-    
