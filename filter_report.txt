@@ -1,0 +1,18 @@
+Filter report for chembl402_activities.tsv
+============================================================
+
+[Layer 3] Butina scaffold clusters (cutoff 0.4 on Morgan2 fps)
+  total clusters: 34
+  top 10 clusters by size (idx: size, exemplar SMILES):
+    cluster 0: size=35  ex=CC(C)n1c(CC[C@@H](O)C[C@@H](O)CC(=O)[O-])c(-c2ccc(F)cc2)c(-c2ccccc2)c1C(N)=O.[Na+]
+    cluster 1: size=22  ex=CC(C)c1nc(-c2ccc(F)cc2)c(-c2ccc(F)cc2)n1/C=C/[C@@H](O)C[C@@H](O)CC(=O)O
+    cluster 2: size=14  ex=CC(C)c1nc(-c2ccccc2)cc(-c2ccc(F)cc2)c1/C=C/[C@@H]1C[C@@H](O)CC(=O)O1
+    cluster 3: size=10  ex=CC(C)c1nn(-c2ccccc2)c(-c2ccc(F)cc2)c1/C=C/[C@@H](O)C[C@@H](O)CC(=O)[O-].[Na+]
+    cluster 4: size=9  ex=CCC(C)(C)C(=O)O[C@H]1C[C@@H](C)C=C2C=C[C@H](C)[C@H](CC[C@@H]3C[C@@H](O)CC(=O)O3)C21
+    cluster 5: size=8  ex=Cn1c(CC[C@@H](O)C[C@@H](O)CC(=O)O)c(-c2ccc(F)cc2)c(-c2ccc(F)cc2)c1C(=O)Nc1ccccc1
+    cluster 6: size=7  ex=CC(C)n1c(CC[C@@H](O)C[C@@H](O)CC(=O)[O-])c(-c2ccc(F)cc2)c2c3ccccc3n(Cc3ccccc3)c(=O)c21.[Na+]
+    cluster 7: size=7  ex=CC(C)c1c(C(=O)NCc2ccccc2)nc(-c2ccc(F)cc2)n1CC[C@@H](O)C[C@@H](O)CC(=O)O
+    cluster 8: size=5  ex=CC(C)c1cc(-c2cccc(Cl)c2)c(-c2ccc(F)cc2)n1/C=C/[C@@H](O)C[C@@H](O)CC(=O)O
+    cluster 9: size=5  ex=CC[C@H](C)C(=O)O[C@H]1C[C@@H](C)C=C2C=C[C@H](C)[C@H](CC[C@@H](O)C[C@@H](O)CC(=O)[O-])[C@H]21.[Na+]
+
+Final surviving compounds: 72

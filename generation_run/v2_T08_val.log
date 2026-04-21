@@ -1,0 +1,47 @@
+[load] generation_run/v2_T08_candidates.csv: 236 candidates
+[ref] CHEMBL filtered set: 51 valid fingerprints
+[ref] marketed statins:    7 fingerprints
+[write] generation_run/v2_T08_validated.csv: 236 validated rows
+
+==============================================================
+VALIDATION REPORT
+==============================================================
+Total validated:           236
+Pass warhead_match:        59  (25.0%)
+Pass lipinski (<=1 viol):  228  (96.6%)
+Pass PAINS (clean):        235  (99.6%)
+Pass ALL 4 filters:        56  (23.7%)
+
+tanimoto_max_marketed distribution:
+  mean   0.3423
+  median 0.3497
+  max    0.5211
+  count > 0.4   63
+  count > 0.5   7
+
+Top 5 by tanimoto_max_marketed:
+
+  #1  T=0.521 vs atorvastatin  T_chembl=0.535
+    SMILES: Cc1c(CCCC(O)CC(=O)O)c(-c2ccc(F)cc2)n(CCC(O)CC(O)CC(=O)O)c1C(C)C
+    warhead=True  lipinski_pass=True  pains_clean=True
+    qed=0.247  mw=507.6  logp=3.861
+
+  #2  T=0.507 vs rosuvastatin  T_chembl=1.000
+    SMILES: CC(C)c1nc(-c2ccc(F)cc2)c(-c2ccc(F)cc2)n1C=CC(O)CC(O)CC(=O)O
+    warhead=True  lipinski_pass=True  pains_clean=True
+    qed=0.435  mw=456.49  logp=4.676
+
+  #3  T=0.507 vs rosuvastatin  T_chembl=1.000
+    SMILES: CC(C)c1nc(-c2ccc(F)cc2)c(-c2ccc(F)cc2)n1C=CC(O)CC(O)CC(=O)O
+    warhead=True  lipinski_pass=True  pains_clean=True
+    qed=0.435  mw=456.49  logp=4.676
+
+  #4  T=0.507 vs rosuvastatin  T_chembl=1.000
+    SMILES: CC(C)c1nc(-c2ccc(F)cc2)c(-c2ccc(F)cc2)n1C=CC(O)CC(O)CC(=O)O
+    warhead=True  lipinski_pass=True  pains_clean=True
+    qed=0.435  mw=456.49  logp=4.676
+
+  #5  T=0.507 vs rosuvastatin  T_chembl=1.000
+    SMILES: CC(C)c1nc(-c2ccc(F)cc2)c(-c2ccc(F)cc2)n1C=CC(O)CC(O)CC(=O)O
+    warhead=True  lipinski_pass=True  pains_clean=True
+    qed=0.435  mw=456.49  logp=4.676

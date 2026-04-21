@@ -1,0 +1,49 @@
+[device] mps
+[ckpt] /Users/girishkrishna/Documents/MSSE_Du/277B Machine Learning/Project_Code/Evidence-Aware-Validation-of-AI-Generated-Drug-Candidates-Using-PPI-Networks/cond_gpt/weights/statin_model_v2.pt
+[stoi] /Users/girishkrishna/Documents/MSSE_Du/277B Machine Learning/Project_Code/Evidence-Aware-Validation-of-AI-Generated-Drug-Candidates-Using-PPI-Networks/molgpt/statin_stoi.json
+[target] 2000 samples in batches of 128, temperature=0.8
+[load] loaded 70 keys, missing=4, unexpected=0
+  batch 1/16: total raw = 128  (t=3.4s)
+  batch 2/16: total raw = 256  (t=5.6s)
+  batch 3/16: total raw = 384  (t=7.9s)
+  batch 4/16: total raw = 512  (t=10.1s)
+  batch 5/16: total raw = 640  (t=12.4s)
+  batch 6/16: total raw = 768  (t=14.7s)
+  batch 7/16: total raw = 896  (t=17.0s)
+  batch 8/16: total raw = 1024  (t=19.2s)
+  batch 9/16: total raw = 1152  (t=21.5s)
+  batch 10/16: total raw = 1280  (t=23.8s)
+  batch 11/16: total raw = 1408  (t=26.1s)
+  batch 12/16: total raw = 1536  (t=28.3s)
+  batch 13/16: total raw = 1664  (t=30.6s)
+  batch 14/16: total raw = 1792  (t=32.9s)
+  batch 15/16: total raw = 1920  (t=35.1s)
+  batch 16/16: total raw = 2000  (t=37.7s)
+
+==============================================================
+GENERATION REPORT
+==============================================================
+Total generated:     2000
+Valid (parseable):   236  (11.8%)
+Unique canonical:    225
+Novel vs training:   224  (training set size: 51)
+Wall time:           38.4s
+
+Top-10 most-frequent canonical SMILES:
+      6  CC(C)c1nc(-c2ccc(F)cc2)c(-c2ccc(F)cc2)n1C=CC(O)CC(O)CC(=O)O
+      3  CC(C)c1nc(-c2ccc(F)cc2)c(-c2ccc(F)cc2)n1C=CC(O)CC(=O)O
+      3  CC(C)c1nc(-c2ccc(F)cc2)c(-c2ccc(F)cc2)n1C=CC(O)CCC(O)CC(=O)O
+      2  CC(C)c1nc(-c2cccc(F)c2)c(-c2ccc(F)cc2)n1C=CC(O)CC(O)CC(=O)O
+      2  CC(C)c1nc(-c2ccccc2)c(-c2ccc(F)cc2)n1C=CC(O)CC(O)CC(=O)O
+      1  CCNC(=O)C1=C(c2ccc(F)cc2)C(C)N(C=CC(O)CC(O)CC(=O)O)C(c2cccc(F)c2)=C1
+      1  CC(=O)CC(O)CC(O)CCn1c(C(C)C)nc(-c2ccc(F)cc2)c1-c1ccc(F)cc1
+      1  CC(C)n1c(-c2cccc(F)c2)c(-c2ccc(F)cc2)n1C=CC(O)CC(O)CO
+      1  CC(C)c1c(-c2ccc(Cl)cc2)nc(-c2ccc(Cl)cc2)n1CCC(O)CCC(O)C(=O)O
+      1  CC(C)CC(O)C=C(C(=O)CCC(O)C=O)C1CC(C)C2C(CCC(O)CC(=O)O)CCC12
+
+Mean QED across valid:   0.418
+Mean MW across valid:    453.7
+Mean LogP across valid:  4.71
+
+Wrote /Users/girishkrishna/Documents/MSSE_Du/277B Machine Learning/Project_Code/Evidence-Aware-Validation-of-AI-Generated-Drug-Candidates-Using-PPI-Networks/generation_run/v2_T08_candidates.csv
+Wrote /Users/girishkrishna/Documents/MSSE_Du/277B Machine Learning/Project_Code/Evidence-Aware-Validation-of-AI-Generated-Drug-Candidates-Using-PPI-Networks/generation_run/v2_T08_valid.smi  (225 unique SMILES)
