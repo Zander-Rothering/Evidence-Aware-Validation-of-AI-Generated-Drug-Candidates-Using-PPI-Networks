@@ -60,14 +60,14 @@ class gnn_agent:
             )
 
         # Defines optimizer and loss function
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=0.01)
         loss_function = nn.CrossEntropyLoss()
 
         # Initializes trainer
         trainer = GNNtrainer(model, optimizer, loss_function)
         self.trainer = trainer
 
-    def train_model(self, epochs=1000):
+    def train_model(self, epochs=10000):
         """
         Train GNN model for specified number of epochs
 
@@ -76,7 +76,16 @@ class gnn_agent:
                 Number of training epochs
         """
         self.trainer.test_model(self.data, epochs=epochs)
+    
+    def logit_prediction(self):
+        """
+        Predicts logit of nodes
+        """
+        self.model.eval()
+        with torch.no_grad():
+            logits = self.model(self.data.x, self.data.edge_index)
+            return logits
 
 
 Agent = gnn_agent(best_model_path=None)
-Agent.train_model(epochs=16)
+Agent.train_model(epochs=10)
