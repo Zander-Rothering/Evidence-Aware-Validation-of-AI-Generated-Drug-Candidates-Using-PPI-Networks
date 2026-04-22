@@ -186,7 +186,7 @@ class GNNtrainer:
                 best_val_acc = val_acc
                 torch.save(self.model.state_dict(), "best_model_state.pt")
 
-            if epoch % 2 == 0 or epoch == 1:
+            if epoch % 100 == 0 or epoch == 1:
                 print(
                     f"Epoch {epoch:03d} | "
                     f"Train Loss: {train_loss:.4f} | "
