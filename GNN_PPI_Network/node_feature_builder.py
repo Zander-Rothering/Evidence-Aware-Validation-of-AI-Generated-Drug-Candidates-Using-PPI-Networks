@@ -19,9 +19,9 @@ class feature_extracter:
     def __init__(
         self,
         proteins=None,
-        protein_gene_file="proteins.txt",
+        protein_gene_file='features_files/proteins.txt',
         url="https://rest.uniprot.org/uniprotkb/search",
-        obo_path='go-basic.obo'
+        obo_path='features_files/go-basic.obo'
     ):
         """
         Initializes class with proteins by their gene name as a list from a text file
@@ -140,7 +140,7 @@ class feature_extracter:
         else:
             raise TypeError(f'Unsupported data type: {type(data)}. Expected DataFrame or file path.')
 
-    def get_uniprot(self, save_path="uniprot_features.csv"):
+    def get_uniprot(self, save_path="features_files/uniprot_features.csv"):
         """
         Uses Uniprot REST API to extract data for each protein by its gene name
 
@@ -166,7 +166,7 @@ class feature_extracter:
 
         return uni_features_df
 
-    def clean_uniprot_features(self, uniprot_data= 'uniprot_features.csv', save_path='cleaned_uniprot.csv'):
+    def clean_uniprot_features(self, uniprot_data= 'features_files/uniprot_features.csv', save_path='features_files/cleaned_uniprot.csv'):
         """
         Cleans extracted Uniprot features data to get GO IDs only for encoding
 
@@ -257,7 +257,7 @@ class feature_extracter:
         # Returns a DataFrame of lists of GO strings for each protein
         return cleaned_uniprot_features
 
-    def ontology_split_go_terms(self, cleaned_uniprot_data='cleaned_uniprot.csv', save_path= 'ontology_split_features.csv'):
+    def ontology_split_go_terms(self, cleaned_uniprot_data='features_files/cleaned_uniprot.csv', save_path= 'features_files/ontology_split_features.csv'):
         """
         Seperates GO IDs for each protein based on ontology
         biological_process (BP)
@@ -345,7 +345,7 @@ class feature_extracter:
 
         return split_features_df
     
-    def add_protein_sequence(self, uniprot_data='uniprot_features.csv', save_path='sequence_df.csv'):
+    def add_protein_sequence(self, uniprot_data='features_files/uniprot_features.csv', save_path='features_files/sequence_df.csv'):
         """
         Parses protein sequence data from Uniprot Data
 
@@ -386,7 +386,7 @@ class feature_extracter:
         protein_df.to_csv(save_path, index=False)
         return protein_df
 
-    def merge_features(self, df1='ontology_split_features.csv', df2='sequence_df.csv', save_path='feature_df.csv'):
+    def merge_features(self, df1='features_files/ontology_split_features.csv', df2='features_files/sequence_df.csv', save_path='feature_df.csv'):
         """
         Merges Ontology and Sequence Dataframes into single Dataframe
 
@@ -423,13 +423,15 @@ class feature_extracter:
         vectors = [self.n2v_model.wv[go_id] for go_id in go_ids if go_id in self.n2v_model.wv]
         return np.mean(vectors, axis=0) if vectors else np.zeros(64)
 
-    def node_features_encoder(self, features_df='feature_df.csv'):
+    def node_features_encoder(self, features_df='features_files/feature_df.csv', save_path="features_files/node_features.pt"):
         """
         Encodes DataFrame features and stores them as a torch tensor for use in GNN training
 
         Parameters
             features_df : DataFrame or str
                 Dataframe or str file path of protein features [GO IDs(BP, CC, MF), AA Sequence]
+            save_path : str
+                File path to save torch tensor
 
         Returns
             x : torch.tensor
@@ -462,6 +464,6 @@ class feature_extracter:
         # Convert to torch tensor
         x = torch.from_numpy(node_features)
         # Save torch tensor
-        torch.save(x, "node_features.pt")
+        torch.save(x, save_path)
 
         return x
