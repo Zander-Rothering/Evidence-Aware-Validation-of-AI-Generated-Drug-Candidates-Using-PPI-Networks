@@ -1,7 +1,7 @@
 import torch
 import stringdb
 import pandas as pd
-
+from sklearn.preprocessing import LabelEncoder
 
 class PPIGraphBuilder:
     """
@@ -24,6 +24,7 @@ class PPIGraphBuilder:
         self.species = species
         self.score_threshold = score_threshold
         self.add_nodes = add_nodes
+        self.encoder = LabelEncoder()
 
     def get_stringdb_network(self, identifiers=["HMGCR"]):
         """
@@ -39,12 +40,16 @@ class PPIGraphBuilder:
                 DataFrame Columns = ['preferredName_A', 'preferredName_B', 'score']
         """
         PPI_df = stringdb.get_network(
-            identifiers=identifiers,
-            species=self.species,
-            required_score=self.score_threshold,
-            caller_identity="PPI_GNN",
-            add_nodes=self.add_nodes,
+            identifiers=identifiers, #list of string ids
+            species=self.species, #species NCBI identifier
+            required_score=self.score_threshold, #score cutoff for edges, corresponds to probability of belonging to same kegg pathway
+            caller_identity="PPI_GNN", #personal identifier for string
+            add_nodes=self.add_nodes, #number of nodes to add to the network based on confidence
         )
+
+        PPI_df["interaction_type"] = "functional_association"
+        PPI_df["interaction_category"] = "functional"
+        PPI_df = PPI_df[["preferredName_A", "preferredName_B", "score","interaction_type", "interaction_category"]]
 
         return PPI_df
 
@@ -78,6 +83,8 @@ class PPIGraphBuilder:
                 "preferredName_A": df["Official Symbol Interactor A"].values,
                 "preferredName_B": df["Official Symbol Interactor B"].values,
                 "score": 700,  # treat all experimental as high confidence
+                "interaction_type": df["Experimental System"].fillna("unknown").values,
+                "interaction_category": df["Experimental System Type"].fillna("unknown").values,
             }
         )
 
@@ -94,10 +101,7 @@ class PPIGraphBuilder:
                 BioGRID interaction DataFrame.
         """
         # Concatenate STRING DB and BioGRID DataFrames
-        combined = pd.concat(
-            [string_df[["preferredName_A", "preferredName_B", "score"]], biogrid_df],
-            ignore_index=True,
-        )
+        combined = pd.concat([string_df, biogrid_df], ignore_index=True)
 
         # Removes duplicate edges
         combined = combined.drop_duplicates(
@@ -140,6 +144,17 @@ class PPIGraphBuilder:
 
         return proteins, protein_mapping
 
+    def encode_edge_types(self, df):
+        df["interaction_type_encoded"] = self.encoder.fit_transform(
+            df["interaction_type"]
+        )
+
+        df["interaction_category_encoded"] = self.encoder.fit_transform(
+            df["interaction_category"]
+        )
+
+        return df
+
     def build_edges(self, df, mapping):
         """
         Creates edge_index tensor
@@ -166,7 +181,7 @@ class PPIGraphBuilder:
 
         return edge_index
 
-    def edge_weights(self, df):
+    def edge_attr(self, df):
         """
         Create edge weights to be stored as edge_attributes
 
@@ -178,8 +193,16 @@ class PPIGraphBuilder:
             edge_weights : torch.tensor
                 Torch tensor of edgeweights for torch geometric data object
         """
-        # Normalize edge weights to between 0-1
-        scores = df["score"].values / 1000.0
-        # Torch tensor of scores to be used as edge attributes
-        edge_weights = torch.tensor(list(scores) * 2, dtype=torch.float)
-        return edge_weights
+        # Normalize scores to between 0-1 and covert to tensor
+        scores = torch.tensor(df["score"].values / 1000.0, dtype=torch.long)
+        types = torch.tensor(df["interaction_type_encoded"].values, dtype=torch.long)
+
+        direction_flag = torch.tensor(
+            (df["interaction_category"] == "genetic").astype(float).values,
+            dtype=torch.long
+        )
+
+        # Stack into [num_edges, 3]
+        edge_attr = torch.stack([scores, types, direction_flag], dim=1)
+ 
+        return edge_attr
