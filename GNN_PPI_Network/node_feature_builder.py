@@ -2,6 +2,7 @@ import requests
 import pandas as pd
 import ast
 import numpy as np
+import mygene
 from sklearn.preprocessing import MultiLabelBinarizer
 import torch
 from concurrent.futures import ThreadPoolExecutor
@@ -41,6 +42,10 @@ class feature_extracter:
 
         # Uniprot REST API url
         self.url = url
+
+        # mygene 
+        mg = mygene.MyGeneInfo()
+        self.mg = mg
 
     def get_protein_gene(self, gene):
         """
@@ -110,7 +115,7 @@ class feature_extracter:
 
         return uni_features_df
 
-    def clean_uniprot_features(self, features_dataframe=None, input_path: str = None):
+    def clean_uniprot_features(self, features_dataframe=None, input_path: str = 'uniprot_features.csv'):
         """
         Cleans extracted Uniprot features data to get GO IDs only for encoding
 
@@ -200,30 +205,175 @@ class feature_extracter:
         # Reset index
         cleaned_uniprot_features = cleaned_uniprot_features.reset_index()
 
-        # Returns a numpy array of lists of GO strings for each protein
+        # Returns a DataFrame of lists of GO strings for each protein
         return cleaned_uniprot_features
 
-    def node_features_encoder(self, features_input):
+    def ontology_split_go_terms(self, df, save_path= 'ontology_split_features.csv'):
         """
-        Encodes cleaned uniprot features and turns them into a torch tensor for GNN training.
+        Seperates GO IDs for each protein based on ontology
+        biological_process (BP)
+        molecular_function (MF)
+        cellular_component (CC)
+
+        Parameters
+        ----------
+        df : DataFrame
+            Cleaned dataframe of all GO IDs for each protein
+
+        Returns
+        -------
+        split_features_df : DataFrame
+            Split features DataFrame by ontology for each protein
+        """
+
+        # Converts row of IDs into multiple rows 
+        df_expl = df.explode("go_terms").rename(columns={"go_terms": "go_id"})
+
+        # Drop empty rows early
+        #exploded = exploded.dropna(subset=["go_id"])
+
+        # Gets all unique go_ids for mapping
+        unique_go_ids = df_expl["go_id"].unique()
+        unique_go_ids = unique_go_ids.tolist()
+
+        go_to_ontology = {}
+
+        # Query mygene for all unique GO IDs
+        mg_results = self.mg.querymany(
+            unique_go_ids,
+            scopes="go",
+            fields="go",
+            species="human"
+        )
+
+        # Loop through results
+        for res in mg_results:
+            # Extract data for GO ID
+            go_data = res.get("go", {})
+
+            # Check what ontology result is
+            for ontology in ["BP", "MF", "CC"]:
+                if ontology in go_data:
+                    ont_data = go_data[ontology]
+
+                    # Reformate all entries to be in list
+                    if isinstance(ont_data, dict):
+                        ont_data = [ont_data]
+
+                    # Get GO ID for mapping
+                    for data in ont_data:
+                        go_id = data.get("id")
+                        # Build GO ID to ontology mapping
+                        if go_id:
+                            go_to_ontology[go_id] = ontology
+
+        # Map GO IDs to a ontology 
+        df_expl["ontology"] = df_expl["go_id"].map(go_to_ontology)
+
+        # Drop unmapped GO IDs
+        df_expl = df_expl.dropna(subset=["ontology"])
+
+        # Rebuild list for each protein by ontology
+        ontology_features = (
+            df_expl
+            .groupby(["gene_name", "ontology"])["go_id"]
+            .apply(list)
+            .unstack(fill_value=[])
+            .reset_index()
+        )
+
+        # Merge features back to original dataframe and drop go_terms column
+        split_features_df = df.merge(ontology_features, on="gene_name", how="left")
+
+        # Fill missing with empty lists
+        for col in ["BP", "MF", "CC"]:
+            split_features_df[col] = split_features_df[col].apply(lambda x: x if isinstance(x, list) else [])
+
+        # Drop go_terms column after splitting
+        split_features_df = split_features_df.drop(columns=["go_terms"])
+
+        split_features_df.to_csv(save_path, index=False)
+
+        return split_features_df
+
+    def add_protein_sequences(self, df, save_path= 'feature_df.csv'):
+        """
+        Adds protein sequences to dataframe using MyGene.
+
+        Requires:
+            df["gene_name"]
+        """
+
+        genes = df["gene_name"].tolist()
+
+        results = self.mg.querymany(
+            genes,
+            scopes="symbol",
+            fields="uniprot.Swiss-Prot.sequence",
+            species="human"
+        )
+
+        # Build mapping: gene → sequence
+        gene_to_seq = {}
+
+        for res in results:
+            gene = res.get("query")
+
+            seq = None
+            uniprot = res.get("uniprot", {})
+
+            if isinstance(uniprot, dict):
+                swiss = uniprot.get("Swiss-Prot")
+
+                if isinstance(swiss, dict):
+                    seq = swiss.get("sequence")
+
+            gene_to_seq[gene] = seq
+
+        # Vectorized assignment
+        df["protein_sequence"] = df["gene_name"].map(gene_to_seq)
+        df["protein_sequence"] = df["protein_sequence"].apply(lambda x: "".join(x) if isinstance(x, list) else x)
+
+        df.to_csv(save_path, index=False)
+
+        return df
+
+    def node_features_encoder(self, input_path=None, df=None):
+        """
+        Encodes cleaned/split uniprot features and turns them into a torch tensor for GNN training.
 
             input_path : string
                 File path to Uniprot features csv file
+            df : DataFrame
+                Features DataFrame
 
         Returns:
             x_tensor : torch.tensor
                 Torch tensor of encoded uniprot features for GNN training
         """
-        # Get clean uniprot features
-        if isinstance(features_input, str):
-            cleaned_features = self.clean_uniprot_features(input_path=features_input)
+        # Check if df or file path was passed
+        if df == None and input_path == None:
+            raise TypeError(f'DataFrame or file path must be passed to node_features_encoder')
+        elif df == None and isinstance(input_path, str):
+            features_df = pd.read_csv('input_path')
+        elif input_path == None and df != None:
+            features_df = df
         else:
-            cleaned_features = self.clean_uniprot_features(
-                features_dataframe=features_input
-            )
+            raise TypeError(f'DataFrame or file path must be passed to node_features_encoder')
+        
+        # Check if features_df is split and if not split
+        if 'BP' in features_df.columns:
+            features_df = features_df
+        elif 'go_terms' in features_df.columns:
+            features_df = self.ontology_split_go_terms(df=features_df)
+        else:
+            features_df = self.clean_uniprot_features(features_dataframe=features_df)
+            features_df = self.ontology_split_go_terms(df=features_df)
 
         # Extract GO features
-        go_data = cleaned_features["go_terms"].values
+        go_BP = features_df["BP"].values
+        go_CC = features_df["CC"].values
+        go_MF = features_df["MF"].values
 
         # Encode GO IDs into binary matrix for each protein
         mlb = MultiLabelBinarizer()
@@ -233,3 +383,8 @@ class feature_extracter:
         x_tensor = torch.from_numpy(x_matrix).float()
 
         return x_tensor
+
+nf_builder = feature_extracter()
+df_F = nf_builder.clean_uniprot_features(input_path= 'uniprot_features.csv')
+split_df = nf_builder.ontology_split_go_terms(df=df_F)
+final_df = nf_builder.add_protein_sequences(df= split_df)
