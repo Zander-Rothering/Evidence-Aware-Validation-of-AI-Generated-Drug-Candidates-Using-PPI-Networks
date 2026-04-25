@@ -45,6 +45,16 @@ class MatchResult:
     # Risk signal contributed to Part 3
     similarity_risk_score: float = 0.0   # 0.0 (low) – 1.0 (high)
 
+    # -------------Final Part 1 output fields passed to Part 2A/2B/3-------------
+    # Stores values required by downstream stages based on the Part 1 output.
+    # Adds fields used by Part 2A/2B/3.
+    risk_tier: str = ""                                   # Part 1 final tier: HIGH / MEDIUM / LOW
+    sider_risks: list[str] = field(default_factory=list)  # A9 SIDER risks used as NLP search seeds
+    search_terms: str = ""                                # A8/A5-derived PubMed search terms for `nlp_agent.py`
+    target: str = "HMGCR"                                 # Target protein context for Part 2A and 2B
+    ml_proba: dict = field(default_factory=dict)          # A10b ML probabilities (not yet implemented)
+    # -----------------------------------------------------------------------------
+
     def to_dict(self) -> dict:
         d = {
             "query_smiles":        self.query_smiles,
@@ -55,6 +65,13 @@ class MatchResult:
             "scaffold_similarity": round(self.scaffold_similarity, 4),
             "is_novel":            self.is_novel,
             "similarity_risk_score": round(self.similarity_risk_score, 4),
+            # ---- For integration with Part 2A/2B/3 ------
+            "risk_tier":           self.risk_tier,
+            "sider_risks":         self.sider_risks,
+            "search_terms":        self.search_terms,
+            "target":              self.target,
+            "ml_proba":            self.ml_proba
+            # ---------------------------------------------
         }
         if self.filter_result is not None:
             d.update(self.filter_result.to_ml_features())
@@ -65,4 +82,3 @@ class MatchResult:
             f"MatchResult(nn={self.nn_name!r}, tanimoto={self.tanimoto:.3f}, "
             f"novel={self.is_novel}, risk={self.similarity_risk_score:.3f})"
         )
-
