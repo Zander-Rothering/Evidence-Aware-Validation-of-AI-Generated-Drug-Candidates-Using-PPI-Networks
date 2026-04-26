@@ -24,7 +24,8 @@ class PPIGraphBuilder:
         self.species = species
         self.score_threshold = score_threshold
         self.add_nodes = add_nodes
-        self.encoder = LabelEncoder()
+        self.type_encoder = LabelEncoder()
+        self.category_encoder = LabelEncoder()
 
     def get_stringdb_network(self, identifiers=["HMGCR"]):
         """
@@ -145,17 +146,17 @@ class PPIGraphBuilder:
         return proteins, protein_mapping
 
     def encode_edge_types(self, df):
-        df["interaction_type_encoded"] = self.encoder.fit_transform(
+        df["interaction_type_encoded"] = self.type_encoder.fit_transform(
             df["interaction_type"]
         )
 
-        df["interaction_category_encoded"] = self.encoder.fit_transform(
+        df["interaction_category_encoded"] = self.category_encoder.fit_transform(
             df["interaction_category"]
         )
 
         return df
 
-    def build_edges(self, df, mapping):
+    def build_edges(self, df, mapping, save_path='edge_files/edge_index.pt'):
         """
         Creates edge_index tensor
 
@@ -179,9 +180,12 @@ class PPIGraphBuilder:
         # Undirected torch tensor of edges
         edge_index = torch.tensor([src + dst, dst + src], dtype=torch.long)
 
+        # Save edge_index
+        torch.save(edge_index, save_path)
+
         return edge_index
 
-    def edge_attr(self, df):
+    def edge_attr(self, df, save_path= 'edge_files/edge_attr.pt'):
         """
         Create edge weights to be stored as edge_attributes
 
@@ -194,15 +198,16 @@ class PPIGraphBuilder:
                 Torch tensor of edgeweights for torch geometric data object
         """
         # Normalize scores to between 0-1 and covert to tensor
-        scores = torch.tensor(df["score"].values / 1000.0, dtype=torch.long)
-        types = torch.tensor(df["interaction_type_encoded"].values, dtype=torch.long)
+        scores = torch.tensor(df["score"].values / 1000.0, dtype=torch.float)
 
-        direction_flag = torch.tensor(
-            (df["interaction_category"] == "genetic").astype(float).values,
-            dtype=torch.long
-        )
+        types = torch.tensor(df["interaction_type_encoded"].values, dtype=torch.long)
+        
+        categories = torch.tensor(df["interaction_category_encoded"].values, dtype=torch.long)
 
         # Stack into [num_edges, 3]
-        edge_attr = torch.stack([scores, types, direction_flag], dim=1)
- 
+        edge_attr = torch.stack([scores, types.float(), categories.float()], dim=1)
+
+        # Save edge_attr
+        torch.save(edge_attr, save_path)
+
         return edge_attr

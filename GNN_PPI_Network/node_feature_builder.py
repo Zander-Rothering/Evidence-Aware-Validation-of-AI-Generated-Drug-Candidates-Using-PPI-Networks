@@ -380,8 +380,8 @@ class feature_extracter:
         protein_df = protein_df.set_index("gene_name").reindex(self.protein_genes)
         
         # Fill missing genes and finalize
-        protein_df["sequence"] = cleaned_df["sequence"].fillna("")
-        protein_df = cleaned_df.reset_index().rename(columns={"sequence": "amino_acid_sequence"})
+        protein_df["sequence"] = protein_df["sequence"].fillna("")
+        protein_df = protein_df.reset_index().rename(columns={"sequence": "amino_acid_sequence"})
         
         protein_df.to_csv(save_path, index=False)
         return protein_df

@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 from torch_geometric.data import Data
@@ -26,23 +27,35 @@ class gnn_agent:
         # Selects device to use (GPU if available, otherwise CPU)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+
         # Builds PPI Graph
-        builder = PPIGraphBuilder()
-        stringdb_df = builder.get_stringdb_network()
-        biogrid_df = builder.get_biogrid_network("BIOGRID-ALL-5.0.256.tab3.txt")
-        edges_df = builder.merge_networks(stringdb_df, biogrid_df)
-        proteins, protein_mapping = builder.protein_extraction(edges_df)
-        edge_index = builder.build_edges(edges_df, protein_mapping)
-        edge_attr = builder.edge_weights(edges_df)
+        if os.path.exists("features_files/edge_index.pt") and os.path.exists("features_files/edge_attr.pt"):
+            edge_index = torch.load("edge_files/edge_index.pt", map_location="cpu", weights_only=True)
+            edge_attr = torch.load("edge_files/edge_attr.pt", map_location="cpu", weights_only=True)
+        else:
+            builder = PPIGraphBuilder()
+            stringdb_df = builder.get_stringdb_network()
+            biogrid_df = builder.get_biogrid_network("edge_files/BIOGRID-ALL-5.0.256.tab3.txt")
+            edges_df = builder.merge_networks(stringdb_df, biogrid_df)
+            proteins, protein_mapping = builder.protein_extraction(edges_df)
+            edges_df = builder.encode_edge_types(edges_df)
+            edge_index = builder.build_edges(edges_df, protein_mapping)
+            edge_attr = builder.edge_attr(edges_df)
 
         # Extracts PPI Node Features
-        extractor = feature_extracter(proteins)
-        protein_features_df = extractor.get_uniprot()
-        x = extractor.node_features_encoder(protein_features_df)
+        if os.path.exists("features_files/node_features.pt"):
+            x = torch.load("features_files/node_features.pt", map_location="cpu", weights_only=True)
+        else:
+            extractor = feature_extracter(proteins)
+            protein_features_df = extractor.get_uniprot()
+            x = extractor.node_features_encoder(protein_features_df)
 
         # Creates PPI Node labels
-        labeler = node_labeler(proteins)
-        y = labeler.node_labels()
+        if os.path.exists("label_files/node_labels.pt"):
+            y = torch.load("label_files/node_labels.pt", map_location="cpu", weights_only=True)
+        else:
+            labeler = node_labeler(proteins)
+            y = labeler.node_labels()
 
         # Creates torch_geometric.data graph object
         data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y)
@@ -56,7 +69,7 @@ class gnn_agent:
         # Loads optional pre-trained weights
         if best_model_path is not None:
             self.model.load_state_dict(
-                torch.load(best_model_path, map_location=self.device)
+                torch.load(best_model_path, map_location=self.device, weights_only=True)
             )
 
         # Defines optimizer and loss function
@@ -88,4 +101,4 @@ class gnn_agent:
 
 
 Agent = gnn_agent(best_model_path=None)
-Agent.train_model(epochs=10)
+Agent.train_model(epochs=51)

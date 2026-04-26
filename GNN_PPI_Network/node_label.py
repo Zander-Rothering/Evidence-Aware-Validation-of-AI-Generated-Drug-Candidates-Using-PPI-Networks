@@ -27,7 +27,7 @@ class node_labeler:
 
         self.protein_genes = protein_genes
 
-    def get_disgenet(self, input_path="disgenet_features.csv"):
+    def get_disgenet(self, input_path="label_files/disgenet_features.csv"):
         """
         Loads DisGeNET dataset containing gene (protein) disease association scores.
 
@@ -66,7 +66,7 @@ class node_labeler:
 
         return disgenet_scores_df
 
-    def node_labels(self, disease_score_threshold=0.3):
+    def node_labels(self, disease_score_threshold=0.3, save_path='label_files/node_labels.pt'):
         """
         Creates binary node labels for GNN training based on disease association
 
@@ -96,5 +96,8 @@ class node_labeler:
 
         # Convert labels to torch tensor
         y_tensor = torch.tensor(labels, dtype=torch.long)
+
+        # Save label tensor
+        torch.save(y_tensor, save_path)
 
         return y_tensor
