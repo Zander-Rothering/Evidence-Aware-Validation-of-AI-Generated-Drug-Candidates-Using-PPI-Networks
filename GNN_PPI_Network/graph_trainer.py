@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn as nn
 from torch_geometric.transforms import RandomLinkSplit
@@ -33,7 +34,7 @@ class GNNtrainer:
 
         self.model.to(self.device)  # Moves model to device
 
-    def data_train_test_split(self, data, train_split=0.7, val_split=0.1):
+    def data_train_test_split(self, data, train_split=0.5, val_split=0.3):
         """
         Splits data into training, validation, and test sets
 
@@ -153,7 +154,7 @@ class GNNtrainer:
 
         return loss.item(), accuracy
 
-    def test_model(self, data, epochs=10000):
+    def test_model(self, data, epochs=10000, metrics_save_path='gnn_files/training_metrics.npy', best_model_save_path='gnn_files/best_model_state.pt'):
         """
         Performs evaluation of model by calculating loss and accuracy of model
 
@@ -171,28 +172,38 @@ class GNNtrainer:
         """
         best_val_acc = 0.0
 
+        # Pre-allocated space to store loss and accuracies
+        metrics = np.zeros((epochs, 3), dtype=np.float32)
+
         # Split data into train, val, and test
         data = self.data_train_test_split(data)
 
         # Loop through epochs to train model
-        for epoch in range(1, epochs + 1):
+        for epoch in range(epochs):
             # Train model on training data and return loss
             train_loss = self.train(data)
             # Evaluate validation nodes
             val_loss, val_acc = self.evaluate(data, "val")
 
+            metrics[epoch, 0] = train_loss
+            metrics[epoch, 1] = val_loss
+            metrics[epoch, 2] = val_acc
+
             # If current val acc is best acc save current model state for later training
             if val_acc > best_val_acc:
                 best_val_acc = val_acc
-                torch.save(self.model.state_dict(), "best_model_state.pt")
+                torch.save(self.model.state_dict(), best_model_save_path)
 
-            if epoch % 5 == 0 or epoch == 1:
+            if epoch % 10 == 0 or epoch == 1:
                 print(
                     f"Epoch {epoch:03d} | "
                     f"Train Loss: {train_loss:.4f} | "
                     f"Val Loss: {val_loss:.4f} | "
                     f"Val Acc: {val_acc:.4f}"
                 )
+
+        # Save training metrics
+        np.save(metrics_save_path, metrics)
 
         # Evaluate test data
         test_loss, test_accuracy = self.evaluate(data, "test")
@@ -201,4 +212,4 @@ class GNNtrainer:
         print(f"Test Loss: {test_loss:.4f}")
         print(f"Test Accuracy: {test_accuracy:.4f}")
 
-        return test_loss, test_accuracy
+        return test_loss, test_accuracy, metrics
