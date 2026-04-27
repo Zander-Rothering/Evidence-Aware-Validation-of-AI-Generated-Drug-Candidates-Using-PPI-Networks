@@ -54,7 +54,7 @@ class PPIGraphBuilder:
 
         return PPI_df
 
-    def get_biogrid_network(self, biogrid_file_path, target_protein="HMGCR"):
+    def get_biogrid_network(self, biogrid_file_path='edge_files/BIOGRID-ALL-5.0.256.tab3.txt', target_protein="HMGCR"):
         """
         Loads BioGRID data and filter for HMGCR interactions.
 
@@ -91,7 +91,7 @@ class PPIGraphBuilder:
 
         return biogrid_edges
 
-    def merge_networks(self, string_df, biogrid_df):
+    def merge_networks(self, string_df, biogrid_df, save_path='edge_files/protein_data.csv'):
         """
         Combines STRING and BioGRID, drop duplicate edges
 
@@ -109,9 +109,12 @@ class PPIGraphBuilder:
             subset=["preferredName_A", "preferredName_B"]
         )
 
+        # Save combined STRING and BioGRID data
+        combined.to_csv(save_path, index=False)
+
         return combined
 
-    def protein_extraction(self, df, save_path="gnn_files/proteins.txt"):
+    def protein_extraction(self, data, save_path="gnn_files/proteins.txt"):
         """
         Extracts unique proteins from DataFrame and creates index mapping
 
@@ -127,6 +130,7 @@ class PPIGraphBuilder:
             protein_mapping : dict
                 Mapping of each protein name to an index
         """
+        df = self.load_data(data = data)
 
         # Extract all unique proteins in df
         proteinA = set(df["preferredName_A"])
@@ -145,7 +149,10 @@ class PPIGraphBuilder:
 
         return proteins, protein_mapping
 
-    def encode_edge_types(self, df):
+    def encode_edge_types(self, data):
+
+        df = self.load_data(data = data)
+
         df["interaction_type_encoded"] = self.type_encoder.fit_transform(
             df["interaction_type"]
         )
@@ -156,7 +163,7 @@ class PPIGraphBuilder:
 
         return df
 
-    def build_edges(self, df, mapping, save_path='edge_files/edge_index.pt'):
+    def build_edges(self, data, mapping, save_path='edge_files/edge_index.pt'):
         """
         Creates edge_index tensor
 
@@ -171,6 +178,8 @@ class PPIGraphBuilder:
                 Edge index tensor for torch geometric data object
                 Shape [2, num_edges * 2] with undirected edges
         """
+        df = self.load_data(data = data)
+
         # Source proteins
         src = [mapping[name] for name in df["preferredName_A"]]
 
@@ -185,7 +194,7 @@ class PPIGraphBuilder:
 
         return edge_index
 
-    def edge_attr(self, df, save_path= 'edge_files/edge_attr.pt'):
+    def edge_attr(self, data, save_path= 'edge_files/edge_attr.pt'):
         """
         Create edge weights to be stored as edge_attributes
 
@@ -197,6 +206,8 @@ class PPIGraphBuilder:
             edge_weights : torch.tensor
                 Torch tensor of edgeweights for torch geometric data object
         """
+        df = self.load_data(data = data)
+
         # Normalize scores to between 0-1 and covert to tensor
         scores = torch.tensor(df["score"].values / 1000.0, dtype=torch.float)
 
@@ -211,3 +222,35 @@ class PPIGraphBuilder:
         torch.save(edge_attr, save_path)
 
         return edge_attr
+    
+    def load_data(self, data=None):
+        """
+        Loads data from either a DataFrame or CSV file path as a DataFrame
+
+        Parameters:
+            data : DataFrame or str
+                Either a DataFrame or a file path to a CSV
+
+        Returns:
+            df : DataFrame
+                DataFrame of data
+        """
+        # Loads a copy if already a DataFrame
+        if isinstance(data, pd.DataFrame):
+            df = data.copy()
+            return df
+
+        # Loads csv file if str file path
+        elif isinstance(data, str):
+            if not os.path.exists(data):
+                raise FileNotFoundError(f"File not found: {data}")
+            df = pd.read_csv(data)
+            return df
+
+        # No file loaded if no DataFrame or file path raise error
+        elif data is None:
+            raise ValueError(f'DataFrame or file path must be passed.')
+
+        # Incorrect type of data is passed raise error
+        else:
+            raise TypeError(f'Unsupported data type: {type(data)}. Expected DataFrame or file path.')
