@@ -15,7 +15,7 @@ class gnn_agent:
     Combines GNN components into pipeline to build and train GNN for PPI Analysis
     """
 
-    def __init__(self, best_model_path=None):
+    def __init__(self, best_model_path=None, learning_rate=0.001, decay=0.3):
         """
         Initializes the GNN agent components
 
@@ -26,7 +26,6 @@ class gnn_agent:
         """
         # Selects device to use (GPU if available, otherwise CPU)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
         # Builds PPI Graph
         if os.path.exists("features_files/edge_index.pt") and os.path.exists("features_files/edge_attr.pt"):
@@ -73,7 +72,7 @@ class gnn_agent:
             )
 
         # Defines optimizer and loss function
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=0.01)
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate, weight_decay=decay)
         loss_function = nn.CrossEntropyLoss()
 
         # Initializes trainer
@@ -101,4 +100,4 @@ class gnn_agent:
 
 
 Agent = gnn_agent(best_model_path=None)
-Agent.train_model(epochs=51)
+Agent.train_model(epochs=1001)
