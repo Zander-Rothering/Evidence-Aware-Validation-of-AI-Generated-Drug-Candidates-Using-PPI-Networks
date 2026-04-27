@@ -111,7 +111,7 @@ class PPIGraphBuilder:
 
         return combined
 
-    def protein_extraction(self, df, save_path="proteins.txt"):
+    def protein_extraction(self, df, save_path="gnn_files/proteins.txt"):
         """
         Extracts unique proteins from DataFrame and creates index mapping
 
