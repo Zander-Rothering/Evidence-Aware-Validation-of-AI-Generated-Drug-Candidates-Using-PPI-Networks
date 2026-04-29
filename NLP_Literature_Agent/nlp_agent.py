@@ -9,7 +9,7 @@ Developed with AI assistance for syntax support.
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
-from Compund_Matching_Engine import MatchResult
+from Compund_Matching_Engine import MatchingEngine, MatchResult
 
 from pubmed_searcher import PubMedSearcher
 from ner_extractor import NERExtractor
@@ -28,14 +28,6 @@ class NLPAgent:
     def get_literature_search_inputs(self, match_result: MatchResult) -> tuple[str, list[str], str]:
         """ Part 1 -> Part 2A input bridge: 
         Get literature-search inputs from Part 1, with safe MVP fallbacks.
-
-        Team pipeline idea:
-          MatchResult should eventually provide search_terms, sider_risks, and target.
-
-        Current repo reality:
-          MatchResult mainly has nearest-neighbor fields, so will fall back to nn_name.
-          It does NOT search the raw query_smiles because novel generated SMILES usually
-          will not have direct PubMed literature.
         """
         search_terms = getattr(match_result, "search_terms", None) or match_result.nn_name
         target = getattr(match_result, "target", None) or "HMGCR"
@@ -49,7 +41,7 @@ class NLPAgent:
             sider_risks = list(sider_risks)
 
         if not search_terms:
-            raise ValueError("NLPAgent needs search_terms or nn_name from MatchResult.")
+            raise ValueError("NLPAgent needs `search_terms` or `nn_name` from MatchResult.")
 
         return str(search_terms), sider_risks, str(target)
 
@@ -81,21 +73,11 @@ if __name__ == "__main__":
     a clean novel pyrrole-core statin with a trifluoroaryl decoration and the canonical dihydroxy-acid tail."
     -> this smiles will be used as `query_smiles` for demo.
     """
-    match = MatchResult(
-        query_smiles="CC(=O)c1c(F)c(-c2ccc(F)cc2)c(-c2ccc(F)cc2)n1CCC(O)CC(O)CC(=O)O",
-        nn_name="atorvastatin",
-        nn_smiles="CC(C)C1=C(C(=C(N1CC[C@H](C[C@H](CC(=O)O)O)O)C2=CC=C(C=C2)F)C3=CC=CC=C3)C(=O)NC4=CC=CC=C4", #atorvastatin: https://pubchem.ncbi.nlm.nih.gov/#query=C33H35FN2O5
-        tanimoto=0.58,  # v2 top hit value from EDA notebook (need to update `Match_reuslt.py` to pass this parameter)
-        is_novel=True,
-    )
+    query_smiles = "CC(=O)c1c(F)c(-c2ccc(F)cc2)c(-c2ccc(F)cc2)n1CCC(O)CC(O)CC(=O)O"
 
-    # Part 1 does not officially store these fields yet, so we attach them here
-    # to show the intended NLPAgent input without editing the Part1: Match_result.py's MatchResult file.
-    # For this MVP demo, `nlp_agent.py` manually pass known statin-related risk terms.
-    # In the full pipeline, these would come from upstream SIDER or compound matching.
-    match.search_terms = "atorvastatin LDL cholesterol hypercholesterolemia"
-    match.sider_risks = ["myopathy", "liver enzyme elevation"]
-    match.target = "HMGCR"
+    # Part 1 `matching_engine.py` now fills `nn_name`, `tanimoto`, `sider_risks`, `search_terms`, and `target`.
+    # This replaces the previous demo-only hardcoded MatchResult fields.
+    match = MatchingEngine().run(query_smiles)
     
     agent = NLPAgent()
     result = agent.run(match)
