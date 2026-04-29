@@ -23,7 +23,7 @@ Class index
     FilterResult        Filter_result.py        Drug-likeness sub-result
 """
 
-from .matching_engine import parse_smiles
+from .matching_engine import MatchingEngine, parse_smiles
 from .compound_loader import CompoundLoader
 from .fingerprint_encoder import FingerprintEncoder
 from .Similarity_scorer import SimilarityScorer, SimilarityResult
@@ -45,4 +45,5 @@ __all__ = [
     "StructureVisualiser",
     "MatchResult",
     "FilterResult",
+    "MatchingEngine",
 ]
