@@ -1,6 +1,6 @@
 """Activity 4 — Build the Reference Library from ChEMBL.
    Activity 9 — Load SIDER inherited adverse-effect profiles.
-   Developed with AI assistance (Claude, Anthropic) for syntax support.
+   Developed with AI assistance for syntax support.
 """
 
 import os
@@ -39,7 +39,7 @@ FALLBACK_STATINS = [
 class CompoundLoader:
     """Loads known HMGCR inhibitors from ChEMBL or a fallback statin list."""
 
-    def __init__(self, target_chembl_id="CHEMBL1781"):
+    def __init__(self, target_chembl_id="CHEMBL402"):
         """Set ChEMBL target ID (default: HMGCR human)."""
         self.target_chembl_id = target_chembl_id
         self.library = []
@@ -179,9 +179,7 @@ class CompoundLoader:
 
     # SIDER side-effect file downloaded from http://sideeffects.embl.de/download/
     # and placed at Compund_Matching_Engine/sider_data/meddra_all_se.tsv.gz
-    _SIDER_FILE = os.path.join(
-        os.path.dirname(__file__), "sider_data", "meddra_all_se.tsv.gz"
-    )
+    _SIDER_FILE = os.path.join(os.path.dirname(__file__), "sider_data", "meddra_all_se.tsv.gz")
 
     def _name_to_cid(self, drug_name):
         """Tier 1 helper: resolve a drug name to a PubChem CID via REST API.
@@ -261,7 +259,7 @@ class CompoundLoader:
         """
         key = nn_name.strip().lower()
 
-        # ── Tier 1: PubChem API -> CID -> SIDER file 
+        # Tier 1: PubChem API -> CID -> SIDER file 
         cid = self._name_to_cid(key)
         if cid is not None:
             sider_df = self._load_sider_df()
@@ -274,7 +272,7 @@ class CompoundLoader:
                           f"{len(effects)} effects from SIDER file")
                     return effects
 
-        # ── Tier 2: offline CID map -> SIDER file (no API) 
+        # Tier 2: offline CID map -> SIDER file (no API) 
         fallback_cid = self._NAME_TO_CID_FALLBACK.get(key)
         if fallback_cid is not None and fallback_cid != cid:
             sider_df = self._load_sider_df()
@@ -287,7 +285,7 @@ class CompoundLoader:
                           f"{len(effects)} effects from SIDER file (offline CID)")
                     return effects
 
-        # -- Tier 3: hardcoded fallback 
+        # Tier 3: hardcoded fallback 
         # Only return effects for drugs explicitly known.
         # For unknown drugs, return an empty list rather than
         # guessing statin-specific risks that may not apply.
@@ -360,4 +358,3 @@ if __name__ == "__main__":
                 print(f"  [{r['tag']}] {r['effect']}")
             if len(risks) > 5:
                 print(f"  ... and {len(risks) - 5} more")
-
