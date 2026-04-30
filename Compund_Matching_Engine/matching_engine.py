@@ -5,12 +5,14 @@ try:
     from .fingerprint_encoder import FingerprintEncoder
     from .Similarity_scorer import SimilarityScorer
     from .Drug_likeness_filter import DrugLikenessFilter
+    from .Scaffold_extractor import ScaffoldExtractor
     from .Match_result import MatchResult
 except ImportError:
     from compound_loader import CompoundLoader
     from fingerprint_encoder import FingerprintEncoder
     from Similarity_scorer import SimilarityScorer
     from Drug_likeness_filter import DrugLikenessFilter
+    from Scaffold_extractor import ScaffoldExtractor
     from Match_result import MatchResult
 
 
@@ -57,6 +59,7 @@ class MatchingEngine:
         self.encoder = FingerprintEncoder()
         self.similarity_scorer = SimilarityScorer(self.library)
         self.drug_likeness_filter = DrugLikenessFilter()
+        self.scaffold_extractor = ScaffoldExtractor()
 
     def run(self, smiles: str) -> MatchResult:
         """Convert one generated SMILES into the Part 1 output container."""
@@ -68,6 +71,8 @@ class MatchingEngine:
         filter_result = self.drug_likeness_filter.filter(mol)
         query_fp = self.encoder.encode(mol)
         similarity = self.similarity_scorer.score(query_fp)
+        nn_mol = Chem.MolFromSmiles(similarity.nn_smiles)
+        scaffold_result = self.scaffold_extractor.extract(mol, nn_mol) if nn_mol else None
         literature_name = self.resolve_literature_name(similarity.nn_name, similarity.nn_smiles)
 
         # A9: use the readable literature name for SIDER when the nearest ChEMBL ID
@@ -81,6 +86,10 @@ class MatchingEngine:
             nn_smiles=similarity.nn_smiles,
             nn_ic50=similarity.nn_ic50,
             tanimoto=similarity.nn_score,
+            shared_atoms=scaffold_result.shared_atoms if scaffold_result else 0,
+            scaffold_similarity=scaffold_result.scaffold_similarity if scaffold_result else 0.0,
+            query_scaffold=scaffold_result.query_scaffold if scaffold_result else "",
+            nn_scaffold=scaffold_result.nn_scaffold if scaffold_result else "",
             filter_result=filter_result,
             sider_risks=[record["effect"] for record in sider_records],
             search_terms=literature_name.strip(),
