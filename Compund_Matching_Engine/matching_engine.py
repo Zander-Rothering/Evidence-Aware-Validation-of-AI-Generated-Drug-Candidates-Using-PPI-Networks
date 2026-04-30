@@ -94,7 +94,7 @@ class MatchingEngine:
             nn_scaffold=scaffold_result.nn_scaffold if scaffold_result else "",
             filter_result=filter_result,
             sider_risks=[record["effect"] for record in sider_records],
-            search_terms=literature_name.strip(),
+            search_terms=self.build_search_terms(literature_name),
             target=self.target,
         )
 
@@ -115,6 +115,11 @@ class MatchingEngine:
     def resolve_literature_name(self, nn_name: str, nn_smiles: str) -> str:
         """Return a readable drug name when a ChEMBL nearest neighbor matches a named statin."""
         return self.named_statin_by_smiles.get(self.canonical_smiles(nn_smiles), nn_name.strip())
+
+    def build_search_terms(self, literature_name: str) -> str:
+        """Build PubMed-friendly search terms for the NLPAgent."""
+        terms = [literature_name.strip(), self.target]
+        return " ".join(term for term in terms if term)
 
     @staticmethod
     def canonical_smiles(smiles: str) -> str:
