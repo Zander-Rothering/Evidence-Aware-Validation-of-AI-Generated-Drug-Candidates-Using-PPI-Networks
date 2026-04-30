@@ -32,6 +32,8 @@ class MatchResult:
 
     # Scaffold comparison (A8)
     shared_atoms: int = 0
+    novel_atoms: int = 0
+    shared_pct: float = 0.0
     scaffold_similarity: float = 0.0
     query_scaffold: str = ""
     nn_scaffold: str = ""
@@ -62,7 +64,10 @@ class MatchResult:
             "nn_smiles":           self.nn_smiles,
             "nn_ic50":             self.nn_ic50,
             "tanimoto":            round(self.tanimoto, 4),
+            "shared_atoms":        self.shared_atoms,
             "scaffold_similarity": round(self.scaffold_similarity, 4),
+            "novel_atoms":         self.novel_atoms,
+            "shared_pct":          round(self.shared_pct, 4),
             "is_novel":            self.is_novel,
             "similarity_risk_score": round(self.similarity_risk_score, 4),
             # ---- For integration with Part 2A/2B/3 ------

@@ -87,6 +87,8 @@ class MatchingEngine:
             nn_ic50=similarity.nn_ic50,
             tanimoto=similarity.nn_score,
             shared_atoms=scaffold_result.shared_atoms if scaffold_result else 0,
+            novel_atoms=scaffold_result.novel_atoms if scaffold_result else 0,
+            shared_pct=scaffold_result.shared_pct if scaffold_result else 0.0,
             scaffold_similarity=scaffold_result.scaffold_similarity if scaffold_result else 0.0,
             query_scaffold=scaffold_result.query_scaffold if scaffold_result else "",
             nn_scaffold=scaffold_result.nn_scaffold if scaffold_result else "",
