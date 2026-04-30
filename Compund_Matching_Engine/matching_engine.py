@@ -74,6 +74,7 @@ class MatchingEngine:
         nn_mol = Chem.MolFromSmiles(similarity.nn_smiles)
         scaffold_result = self.scaffold_extractor.extract(mol, nn_mol) if nn_mol else None
         literature_name = self.resolve_literature_name(similarity.nn_name, similarity.nn_smiles)
+        rule_tier = self.assign_rule_tier(filter_result, similarity)
 
         # A9: use the readable literature name for SIDER when the nearest ChEMBL ID
         # is actually a known statin such as atorvastatin.
@@ -95,6 +96,7 @@ class MatchingEngine:
             filter_result=filter_result,
             sider_risks=[record["effect"] for record in sider_records],
             search_terms=self.build_search_terms(literature_name),
+            risk_tier=rule_tier, # this line will be updated when other rules come into play
             target=self.target,
         )
 
@@ -120,6 +122,22 @@ class MatchingEngine:
         """Build PubMed-friendly search terms for the NLPAgent."""
         terms = [literature_name.strip(), self.target]
         return " ".join(term for term in terms if term)
+
+    def assign_rule_tier(self, filter_result, similarity) -> str:
+        """Assign A10a rule-based risk tier from filter and similarity outputs."""
+        if filter_result.pains_flag or filter_result.brenk_flag:
+            return "HIGH"
+
+        if filter_result.violations >= 2:
+            return "HIGH"
+
+        if filter_result.qed < 0.34:
+            return "HIGH"
+
+        if similarity.nn_score >= 0.80 and similarity.nn_ic50 is not None and similarity.nn_ic50 <= 100:
+            return "LOW"
+
+        return "MEDIUM"
 
     @staticmethod
     def canonical_smiles(smiles: str) -> str:
