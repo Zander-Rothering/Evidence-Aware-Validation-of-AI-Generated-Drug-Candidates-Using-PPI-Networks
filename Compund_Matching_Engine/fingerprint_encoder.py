@@ -38,17 +38,18 @@ class FingerprintEncoder:
         return array
 
 # Test
-mol = Chem.MolFromSmiles("CC(C)c1ccccc1")
-encoder = FingerprintEncoder()
-fp = encoder.encode(mol)
-print(fp)
-print(type(fp))
-print(len(fp))
-print(f"Bits ON: {fp.GetNumOnBits()}")
+if __name__ == "__main__":
+    mol = Chem.MolFromSmiles("CC(C)c1ccccc1")
+    encoder = FingerprintEncoder()
+    fp = encoder.encode(mol)
+    print(fp)
+    print(type(fp))
+    print(len(fp))
+    print(f"Bits ON: {fp.GetNumOnBits()}")
 
-arr = encoder.to_numpy(fp)
-print(f"Numpy array shape: {arr.shape}")
-print(f"Numpy array type: {arr.dtype}")
+    arr = encoder.to_numpy(fp)
+    print(f"Numpy array shape: {arr.shape}")
+    print(f"Numpy array type: {arr.dtype}")
 
 
 
