@@ -4,11 +4,13 @@ try:
     from .compound_loader import CompoundLoader
     from .fingerprint_encoder import FingerprintEncoder
     from .Similarity_scorer import SimilarityScorer
+    from .Drug_likeness_filter import DrugLikenessFilter
     from .Match_result import MatchResult
 except ImportError:
     from compound_loader import CompoundLoader
     from fingerprint_encoder import FingerprintEncoder
     from Similarity_scorer import SimilarityScorer
+    from Drug_likeness_filter import DrugLikenessFilter
     from Match_result import MatchResult
 
 
@@ -54,6 +56,7 @@ class MatchingEngine:
         # Convert generated molecules into fingerprints, then rank nearest neighbors
         self.encoder = FingerprintEncoder()
         self.similarity_scorer = SimilarityScorer(self.library)
+        self.drug_likeness_filter = DrugLikenessFilter()
 
     def run(self, smiles: str) -> MatchResult:
         """Convert one generated SMILES into the Part 1 output container."""
@@ -62,6 +65,7 @@ class MatchingEngine:
             return MatchResult(query_smiles=smiles, target=self.target, search_terms=self.target)
 
         # A3 + A5: encode the generated molecule and find the closest reference drug
+        filter_result = self.drug_likeness_filter.filter(mol)
         query_fp = self.encoder.encode(mol)
         similarity = self.similarity_scorer.score(query_fp)
         literature_name = self.resolve_literature_name(similarity.nn_name, similarity.nn_smiles)
@@ -77,6 +81,7 @@ class MatchingEngine:
             nn_smiles=similarity.nn_smiles,
             nn_ic50=similarity.nn_ic50,
             tanimoto=similarity.nn_score,
+            filter_result=filter_result,
             sider_risks=[record["effect"] for record in sider_records],
             search_terms=literature_name.strip(),
             target=self.target,
