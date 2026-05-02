@@ -20,7 +20,7 @@ class RiskAggregator:
         # Calculate probabilities using softmax
         probs = F.softmax(logits, dim=1)
 
-        # Extract probability of single class 
+        # Extract probability of single class
         risk_scores = probs[:, 1]
 
         # Average risk score over PPI nodes

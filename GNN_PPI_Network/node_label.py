@@ -66,7 +66,9 @@ class node_labeler:
 
         return disgenet_scores_df
 
-    def node_labels(self, disease_score_threshold=0.3, save_path='label_files/node_labels.pt'):
+    def node_labels(
+        self, disease_score_threshold=0.3, save_path="label_files/node_labels.pt"
+    ):
         """
         Creates binary node labels for GNN training based on disease association
 

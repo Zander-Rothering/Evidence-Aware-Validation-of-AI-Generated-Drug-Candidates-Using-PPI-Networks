@@ -3,6 +3,7 @@ import stringdb
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 
+
 class PPIGraphBuilder:
     """
     Constructs protein-protein interaction (PPI) graphss using Biogrid and STRING DB based on a target protein.
@@ -41,20 +42,32 @@ class PPIGraphBuilder:
                 DataFrame Columns = ['preferredName_A', 'preferredName_B', 'score']
         """
         PPI_df = stringdb.get_network(
-            identifiers=identifiers, #list of string ids
-            species=self.species, #species NCBI identifier
-            required_score=self.score_threshold, #score cutoff for edges, corresponds to probability of belonging to same kegg pathway
-            caller_identity="PPI_GNN", #personal identifier for string
-            add_nodes=self.add_nodes, #number of nodes to add to the network based on confidence
+            identifiers=identifiers,  # list of string ids
+            species=self.species,  # species NCBI identifier
+            required_score=self.score_threshold,  # score cutoff for edges, corresponds to probability of belonging to same kegg pathway
+            caller_identity="PPI_GNN",  # personal identifier for string
+            add_nodes=self.add_nodes,  # number of nodes to add to the network based on confidence
         )
 
         PPI_df["Experimental System"] = "functional_association"
         PPI_df["Experimental System Type"] = "functional"
-        PPI_df = PPI_df[["preferredName_A", "preferredName_B", "score", "Experimental System", "Experimental System Type"]]
+        PPI_df = PPI_df[
+            [
+                "preferredName_A",
+                "preferredName_B",
+                "score",
+                "Experimental System",
+                "Experimental System Type",
+            ]
+        ]
 
         return PPI_df
 
-    def get_biogrid_network(self, biogrid_file_path='edge_files/BIOGRID-ALL-5.0.256.tab3.txt', target_protein="HMGCR"):
+    def get_biogrid_network(
+        self,
+        biogrid_file_path="edge_files/BIOGRID-ALL-5.0.256.tab3.txt",
+        target_protein="HMGCR",
+    ):
         """
         Loads BioGRID data and filter for HMGCR interactions.
 
@@ -84,14 +97,20 @@ class PPIGraphBuilder:
                 "preferredName_A": df["Official Symbol Interactor A"].values,
                 "preferredName_B": df["Official Symbol Interactor B"].values,
                 "score": 700,  # treat all experimental as high confidence
-                "Experimental System": df["Experimental System"].fillna("unknown").values,
-                "Experimental System Type": df["Experimental System Type"].fillna("unknown").values,
+                "Experimental System": df["Experimental System"]
+                .fillna("unknown")
+                .values,
+                "Experimental System Type": df["Experimental System Type"]
+                .fillna("unknown")
+                .values,
             }
         )
 
         return biogrid_edges
 
-    def merge_networks(self, string_df, biogrid_df, save_path='edge_files/protein_data.csv'):
+    def merge_networks(
+        self, string_df, biogrid_df, save_path="edge_files/protein_data.csv"
+    ):
         """
         Combines STRING and BioGRID, drop duplicate edges
 
@@ -104,13 +123,13 @@ class PPIGraphBuilder:
         # Concatenate STRING DB and BioGRID DataFrames
         combined = pd.concat([string_df, biogrid_df], ignore_index=True)
 
-        combined = combined.sort_values(by="Experimental System Type", ascending=False) 
+        combined = combined.sort_values(by="Experimental System Type", ascending=False)
         # Sort so Experimental System Type of functional always after all other types
 
         # Removes duplicate edges
-        #Drop duplicate experimental system type of functional if other present
+        # Drop duplicate experimental system type of functional if other present
         combined = combined.drop_duplicates(
-            subset=["preferredName_A", "preferredName_B"], keep='first'
+            subset=["preferredName_A", "preferredName_B"], keep="first"
         )
 
         # Save combined STRING and BioGRID data
@@ -134,7 +153,7 @@ class PPIGraphBuilder:
             protein_mapping : dict
                 Mapping of each protein name to an index
         """
-        df = self.load_data(data = data)
+        df = self.load_data(data=data)
 
         # Extract all unique proteins in df
         proteinA = set(df["preferredName_A"])
@@ -155,7 +174,7 @@ class PPIGraphBuilder:
 
     def encode_edge_types(self, data):
 
-        df = self.load_data(data = data)
+        df = self.load_data(data=data)
 
         df["Experimental System encoded"] = self.type_encoder.fit_transform(
             df["Experimental System"]
@@ -167,7 +186,7 @@ class PPIGraphBuilder:
 
         return df
 
-    def build_edges(self, data, mapping, save_path='edge_files/edge_index.pt'):
+    def build_edges(self, data, mapping, save_path="edge_files/edge_index.pt"):
         """
         Creates edge_index tensor
 
@@ -182,7 +201,7 @@ class PPIGraphBuilder:
                 Edge index tensor for torch geometric data object
                 Shape [2, num_edges * 2] with undirected edges
         """
-        df = self.load_data(data = data)
+        df = self.load_data(data=data)
 
         # Source proteins
         src = [mapping[name] for name in df["preferredName_A"]]
@@ -198,7 +217,7 @@ class PPIGraphBuilder:
 
         return edge_index
 
-    def edge_attr(self, data, save_path= 'edge_files/edge_attr.pt'):
+    def edge_attr(self, data, save_path="edge_files/edge_attr.pt"):
         """
         Create edge weights to be stored as edge_attributes
 
@@ -210,14 +229,16 @@ class PPIGraphBuilder:
             edge_weights : torch.tensor
                 Torch tensor of edgeweights for torch geometric data object
         """
-        df = self.load_data(data = data)
+        df = self.load_data(data=data)
 
         # Normalize scores to between 0-1 and covert to tensor
         scores = torch.tensor(df["score"].values / 1000.0, dtype=torch.float)
 
         types = torch.tensor(df["Experimental System encoded"].values, dtype=torch.long)
-        
-        categories = torch.tensor(df["Experimental System Type encoded"].values, dtype=torch.long)
+
+        categories = torch.tensor(
+            df["Experimental System Type encoded"].values, dtype=torch.long
+        )
 
         # Stack into [num_edges, 3]
         edge_attr = torch.stack([scores, types.float(), categories.float()], dim=1)
@@ -226,7 +247,7 @@ class PPIGraphBuilder:
         torch.save(edge_attr, save_path)
 
         return edge_attr
-    
+
     def load_data(self, data=None):
         """
         Loads data from either a DataFrame or CSV file path as a DataFrame
@@ -253,8 +274,10 @@ class PPIGraphBuilder:
 
         # No file loaded if no DataFrame or file path raise error
         elif data is None:
-            raise ValueError(f'DataFrame or file path must be passed.')
+            raise ValueError(f"DataFrame or file path must be passed.")
 
         # Incorrect type of data is passed raise error
         else:
-            raise TypeError(f'Unsupported data type: {type(data)}. Expected DataFrame or file path.')
+            raise TypeError(
+                f"Unsupported data type: {type(data)}. Expected DataFrame or file path."
+            )

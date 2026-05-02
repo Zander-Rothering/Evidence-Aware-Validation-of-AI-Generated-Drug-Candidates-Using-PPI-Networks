@@ -1,6 +1,7 @@
 import os
 import networkx as nx
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import torch
 from torch_geometric.utils import to_networkx
 from torch_geometric.data import Data
@@ -10,9 +11,15 @@ from node_feature_builder import feature_extracter
 from ppi_graph_builder import PPIGraphBuilder
 
 # Builds PPI Graph
-if os.path.exists("features_files/edge_index.pt") and os.path.exists("features_files/edge_attr.pt"):
-    edge_index = torch.load("edge_files/edge_index.pt", map_location="cpu", weights_only=True)
-    edge_attr = torch.load("edge_files/edge_attr.pt", map_location="cpu", weights_only=True)
+if os.path.exists("features_files/edge_index.pt") and os.path.exists(
+    "features_files/edge_attr.pt"
+):
+    edge_index = torch.load(
+        "edge_files/edge_index.pt", map_location="cpu", weights_only=True
+    )
+    edge_attr = torch.load(
+        "edge_files/edge_attr.pt", map_location="cpu", weights_only=True
+    )
 else:
     builder = PPIGraphBuilder()
     stringdb_df = builder.get_stringdb_network()
@@ -25,7 +32,9 @@ else:
 
 # Extracts PPI Node Features
 if os.path.exists("features_files/node_features.pt"):
-    x = torch.load("features_files/node_features.pt", map_location="cpu", weights_only=True)
+    x = torch.load(
+        "features_files/node_features.pt", map_location="cpu", weights_only=True
+    )
 else:
     extractor = feature_extracter(proteins)
     protein_features_df = extractor.get_uniprot()
@@ -44,9 +53,25 @@ data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y)
 # Convert PyG Data to NetworkX graph
 G = to_networkx(data, to_undirected=True)
 
+# Node labels
+node_labels = data.y.cpu().numpy()
+
 # Visualize the graph
-plt.figure(figsize=(10, 10))
-nx.draw(G, node_size=7, pos=nx.spring_layout(G), with_labels=False)
-plt.title('PPI Network: HMGCR', fontsize=15)
-plt.tight_layout()
+fig, ax = plt.subplots(figsize=(8, 8))
+nx.draw(
+    G,
+    node_size=7,
+    node_color=node_labels,
+    cmap=plt.cm.bwr,
+    pos=nx.spring_layout(G),
+    with_labels=False,
+    ax=ax,
+)
+legend_handles = [
+    mpatches.Patch(color=plt.cm.bwr(0.0), label="Low Risk"),
+    mpatches.Patch(color=plt.cm.bwr(1.0), label="High Risk"),
+]
+
+ax.legend(handles=legend_handles, title="Risk Score")
+ax.set_title("PPI Network: HMGCR", fontsize=15, pad=20)
 plt.show()

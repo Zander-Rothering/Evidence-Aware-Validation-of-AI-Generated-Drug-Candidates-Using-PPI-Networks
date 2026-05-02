@@ -154,7 +154,13 @@ class GNNtrainer:
 
         return loss.item(), accuracy
 
-    def test_model(self, data, epochs=10000, metrics_save_path='gnn_files/training_metrics.npy', best_model_save_path='gnn_files/best_model_state.pt'):
+    def test_model(
+        self,
+        data,
+        epochs=10000,
+        metrics_save_path="gnn_files/training_metrics.npy",
+        best_model_save_path="gnn_files/best_model_state.pt",
+    ):
         """
         Performs evaluation of model by calculating loss and accuracy of model
 

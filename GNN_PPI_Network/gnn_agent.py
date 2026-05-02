@@ -28,13 +28,21 @@ class gnn_agent:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Builds PPI Graph
-        if os.path.exists("features_files/edge_index.pt") and os.path.exists("features_files/edge_attr.pt"):
-            edge_index = torch.load("edge_files/edge_index.pt", map_location="cpu", weights_only=True)
-            edge_attr = torch.load("edge_files/edge_attr.pt", map_location="cpu", weights_only=True)
+        if os.path.exists("features_files/edge_index.pt") and os.path.exists(
+            "features_files/edge_attr.pt"
+        ):
+            edge_index = torch.load(
+                "edge_files/edge_index.pt", map_location="cpu", weights_only=True
+            )
+            edge_attr = torch.load(
+                "edge_files/edge_attr.pt", map_location="cpu", weights_only=True
+            )
         else:
             builder = PPIGraphBuilder()
             stringdb_df = builder.get_stringdb_network()
-            biogrid_df = builder.get_biogrid_network("edge_files/BIOGRID-ALL-5.0.256.tab3.txt")
+            biogrid_df = builder.get_biogrid_network(
+                "edge_files/BIOGRID-ALL-5.0.256.tab3.txt"
+            )
             edges_df = builder.merge_networks(stringdb_df, biogrid_df)
             proteins, protein_mapping = builder.protein_extraction(edges_df)
             edges_df = builder.encode_edge_types(edges_df)
@@ -43,7 +51,9 @@ class gnn_agent:
 
         # Extracts PPI Node Features
         if os.path.exists("features_files/node_features.pt"):
-            x = torch.load("features_files/node_features.pt", map_location="cpu", weights_only=True)
+            x = torch.load(
+                "features_files/node_features.pt", map_location="cpu", weights_only=True
+            )
         else:
             extractor = feature_extracter(proteins)
             protein_features_df = extractor.get_uniprot()
@@ -51,7 +61,9 @@ class gnn_agent:
 
         # Creates PPI Node labels
         if os.path.exists("label_files/node_labels.pt"):
-            y = torch.load("label_files/node_labels.pt", map_location="cpu", weights_only=True)
+            y = torch.load(
+                "label_files/node_labels.pt", map_location="cpu", weights_only=True
+            )
         else:
             labeler = node_labeler(proteins)
             y = labeler.node_labels()
@@ -72,7 +84,9 @@ class gnn_agent:
             )
 
         # Defines optimizer and loss function
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate, weight_decay=decay)
+        optimizer = torch.optim.Adam(
+            self.model.parameters(), lr=learning_rate, weight_decay=decay
+        )
         loss_function = nn.CrossEntropyLoss()
 
         # Initializes trainer
@@ -88,7 +102,7 @@ class gnn_agent:
                 Number of training epochs
         """
         self.trainer.test_model(self.data, epochs=epochs)
-    
+
     def logit_prediction(self):
         """
         Predicts logit of nodes
