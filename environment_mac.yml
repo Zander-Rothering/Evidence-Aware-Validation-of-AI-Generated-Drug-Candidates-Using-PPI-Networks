@@ -1,26 +1,28 @@
 name: project_env
+
 channels:
-  - pytorch
-  - pyg
   - conda-forge
-  - defaults
+  - pytorch
 
 dependencies:
   - python=3.10
-  - pip
-  - pytorch
+  - numpy
+  - pandas
+  - matplotlib
+  - scikit-learn
+  - pytorch>=2.0
   - torchvision
   - torchaudio
-  - torch-geometric
-  - pyg
-  - torch-scatter
-  - torch-sparse
-  - torch-cluster
-  - torch-spline-conv
+  - networkx
+  - transformers
   - rdkit
-  - pandas
-  - numpy
+  - biopython
+  - goatools
   - requests
+  - rich
+  - pip
 
   - pip:
+      - torch-geometric
+      - node2vec
       - stringdb
