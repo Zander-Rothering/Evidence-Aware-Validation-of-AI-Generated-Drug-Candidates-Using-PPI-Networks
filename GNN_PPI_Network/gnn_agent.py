@@ -111,7 +111,3 @@ class gnn_agent:
         with torch.no_grad():
             logits = self.model(self.data.x, self.data.edge_index)
             return logits
-
-
-Agent = gnn_agent(best_model_path=None)
-Agent.train_model(epochs=1001)
