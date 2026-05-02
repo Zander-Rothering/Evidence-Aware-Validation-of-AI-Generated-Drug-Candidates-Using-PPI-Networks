@@ -48,9 +48,9 @@ class PPIGraphBuilder:
             add_nodes=self.add_nodes, #number of nodes to add to the network based on confidence
         )
 
-        PPI_df["interaction_type"] = "functional_association"
-        PPI_df["interaction_category"] = "functional"
-        PPI_df = PPI_df[["preferredName_A", "preferredName_B", "score","interaction_type", "interaction_category"]]
+        PPI_df["Experimental System"] = "functional_association"
+        PPI_df["Experimental System Type"] = "functional"
+        PPI_df = PPI_df[["preferredName_A", "preferredName_B", "score", "Experimental System", "Experimental System Type"]]
 
         return PPI_df
 
@@ -84,8 +84,8 @@ class PPIGraphBuilder:
                 "preferredName_A": df["Official Symbol Interactor A"].values,
                 "preferredName_B": df["Official Symbol Interactor B"].values,
                 "score": 700,  # treat all experimental as high confidence
-                "interaction_type": df["Experimental System"].fillna("unknown").values,
-                "interaction_category": df["Experimental System Type"].fillna("unknown").values,
+                "Experimental System": df["Experimental System"].fillna("unknown").values,
+                "Experimental System Type": df["Experimental System Type"].fillna("unknown").values,
             }
         )
 
@@ -104,9 +104,13 @@ class PPIGraphBuilder:
         # Concatenate STRING DB and BioGRID DataFrames
         combined = pd.concat([string_df, biogrid_df], ignore_index=True)
 
+        combined = combined.sort_values(by="Experimental System Type", ascending=False) 
+        # Sort so Experimental System Type of functional always after all other types
+
         # Removes duplicate edges
+        #Drop duplicate experimental system type of functional if other present
         combined = combined.drop_duplicates(
-            subset=["preferredName_A", "preferredName_B"]
+            subset=["preferredName_A", "preferredName_B"], keep='first'
         )
 
         # Save combined STRING and BioGRID data
@@ -153,12 +157,12 @@ class PPIGraphBuilder:
 
         df = self.load_data(data = data)
 
-        df["interaction_type_encoded"] = self.type_encoder.fit_transform(
-            df["interaction_type"]
+        df["Experimental System encoded"] = self.type_encoder.fit_transform(
+            df["Experimental System"]
         )
 
-        df["interaction_category_encoded"] = self.category_encoder.fit_transform(
-            df["interaction_category"]
+        df["Experimental System Type encoded"] = self.category_encoder.fit_transform(
+            df["Experimental System Type"]
         )
 
         return df
@@ -211,9 +215,9 @@ class PPIGraphBuilder:
         # Normalize scores to between 0-1 and covert to tensor
         scores = torch.tensor(df["score"].values / 1000.0, dtype=torch.float)
 
-        types = torch.tensor(df["interaction_type_encoded"].values, dtype=torch.long)
+        types = torch.tensor(df["Experimental System encoded"].values, dtype=torch.long)
         
-        categories = torch.tensor(df["interaction_category_encoded"].values, dtype=torch.long)
+        categories = torch.tensor(df["Experimental System Type encoded"].values, dtype=torch.long)
 
         # Stack into [num_edges, 3]
         edge_attr = torch.stack([scores, types.float(), categories.float()], dim=1)
