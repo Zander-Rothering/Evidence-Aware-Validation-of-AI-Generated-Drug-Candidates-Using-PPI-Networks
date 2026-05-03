@@ -7,6 +7,7 @@ try:
     from .Drug_likeness_filter import DrugLikenessFilter
     from .Scaffold_extractor import ScaffoldExtractor
     from .Match_result import MatchResult
+    from .risk_classifier import RiskClassifier
 except ImportError:
     from compound_loader import CompoundLoader
     from fingerprint_encoder import FingerprintEncoder
@@ -14,6 +15,7 @@ except ImportError:
     from Drug_likeness_filter import DrugLikenessFilter
     from Scaffold_extractor import ScaffoldExtractor
     from Match_result import MatchResult
+    from risk_classifier import RiskClassifier
 
 
 def parse_smiles(smiles: str):
@@ -61,6 +63,14 @@ class MatchingEngine:
         self.drug_likeness_filter = DrugLikenessFilter()
         self.scaffold_extractor = ScaffoldExtractor()
 
+        # A10b ANN classifier is optional: MatchingEngine should still run
+        # even if the saved model artifact is missing or incompatible.
+        try:
+            self.risk_classifier = RiskClassifier.load()
+        except Exception as e:
+            print(f"[A10c] RiskClassifier unavailable: {e}")
+            self.risk_classifier = None
+
     def run(self, smiles: str) -> MatchResult:
         """Convert one generated SMILES into the Part 1 output container."""
         mol, status = parse_smiles(smiles)
@@ -76,9 +86,23 @@ class MatchingEngine:
         literature_name = self.resolve_literature_name(similarity.nn_name, similarity.nn_smiles)
         rule_tier = self.assign_rule_tier(filter_result, similarity)
 
+        # A10b: optional ANN prediction stored as supporting evidence.
+        ml_tier = ""
+        ml_proba = {}
+        if self.risk_classifier is not None:
+            try:
+                ml_prediction = self.risk_classifier.predict(smiles)
+                ml_tier = ml_prediction.tier
+                ml_proba = ml_prediction.proba
+            except Exception as e:
+                print(f"[A10c] RiskClassifier prediction failed: {e}")
+
         # A9: use the readable literature name for SIDER when the nearest ChEMBL ID
         # is actually a known statin such as atorvastatin.
         sider_records = self.loader.load_sider_risks(literature_name, similarity.nn_score)
+
+        # A10c: combine A10a rule tier with A10b ANN evidence.
+        final_tier, confidence_flag = self.combine_rule_and_ml(rule_tier, ml_tier, ml_proba)
 
         # Pack the minimum Part 1 outputs needed by NLPAgent
         return MatchResult(
@@ -96,7 +120,10 @@ class MatchingEngine:
             filter_result=filter_result,
             sider_risks=[record["effect"] for record in sider_records],
             search_terms=self.build_search_terms(literature_name),
-            risk_tier=rule_tier, # this line will be updated when other rules come into play
+            risk_tier=final_tier,
+            ml_tier=ml_tier,
+            ml_proba=ml_proba,
+            confidence_flag=confidence_flag,
             target=self.target,
         )
 
@@ -138,6 +165,44 @@ class MatchingEngine:
             return "LOW"
 
         return "MEDIUM"
+
+    def combine_rule_and_ml(self, rule_tier: str, ml_tier: str, ml_proba: dict) -> tuple[str, str]:
+        """A10c: combine rule and ANN verdicts with conservative escalation."""
+        if not ml_tier:
+            # No ANN prediction available -> fall back to A10a rule alone.
+            final_tier = rule_tier
+            flag = "RULE_ONLY"
+            return final_tier, flag
+
+        rank = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
+        ml_confidence = float(ml_proba.get(ml_tier, 0.0)) if ml_proba else 0.0
+
+        if rule_tier == ml_tier:
+            # Rule and ANN agree; flag splits on ANN self-confidence.
+            final_tier = rule_tier
+            if ml_confidence >= 0.70:
+                flag = "AGREE_HIGH_CONF"
+            else:
+                flag = "AGREE_LOW_CONF"
+            return final_tier, flag
+
+        if rank.get(ml_tier, 0) > rank.get(rule_tier, 0):
+            # ANN says it is riskier than the rule said.
+            if ml_confidence >= 0.70:
+                # Confident ANN escalation: trust ANN, raise final tier.
+                final_tier = ml_tier
+                flag = "REVIEW_ML_ESCALATED"
+            else:
+                # Low-confidence escalation: keep rule tier, flag for review.
+                final_tier = rule_tier
+                flag = "REVIEW_ML_HIGHER_LOW_CONF"
+            return final_tier, flag
+
+        # ANN predicts a less-risky tier than the rule. Conservatively keep
+        # the rule's verdict and flag the disagreement for review.
+        final_tier = rule_tier
+        flag = "REVIEW_RULE_MORE_CONSERVATIVE"
+        return final_tier, flag
 
     @staticmethod
     def canonical_smiles(smiles: str) -> str:
