@@ -55,6 +55,8 @@ class MatchResult:
     search_terms: str = ""                                # A8/A5-derived PubMed search terms for `nlp_agent.py`
     target: str = "HMGCR"                                 # Target protein context for Part 2A and 2B
     ml_proba: dict = field(default_factory=dict)          # A10b ML probabilities (not yet implemented)
+    ml_tier: str = ""                                     # A10b ANN predicted tier: HIGH / MEDIUM / LOW
+    confidence_flag: str = ""                             # A10c flag from comparing rule tier vs ANN tier (passed downstream)
     # -----------------------------------------------------------------------------
 
     def to_dict(self) -> dict:
@@ -75,7 +77,9 @@ class MatchResult:
             "sider_risks":         self.sider_risks,
             "search_terms":        self.search_terms,
             "target":              self.target,
-            "ml_proba":            self.ml_proba
+            "ml_proba":            self.ml_proba,
+            "ml_tier":             self.ml_tier,
+            "confidence_flag":     self.confidence_flag,
             # ---------------------------------------------
         }
         if self.filter_result is not None:
