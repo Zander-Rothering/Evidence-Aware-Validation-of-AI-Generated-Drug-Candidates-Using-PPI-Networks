@@ -9,7 +9,7 @@ dependencies:
   - numpy
   - pandas
   - matplotlib
-  - scikit-learn
+  - scikit-learn=1.7.2
   - pytorch>=2.0
   - torchvision
   - torchaudio
