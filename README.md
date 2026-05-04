@@ -39,3 +39,24 @@ To remove the environment and all dependencies run:
 ### Environment Troubleshooting
 
 It is recommended to install all dependencies using the Makefile command to avoid installation issues. If issues arise when installing dependencies all may be installed via `pip` with the exception of `RDKit` which should be installed via `conda-forge`.
+
+## Running Pipeline
+
+### Running Compound Matching Engine
+
+### Running NLP Literature Agent
+
+### Running PPI Network GNN
+
+The GNN portion of this pipeline can be executed from the root directory using the provided Makefile. 
+
+To run the full GNN pipeline to generate a risk score use:
+
+`make run_gnn`
+
+This command executes the main script located in GNN_PPI_Network/network_result.py and handles the end-to-end workflow.
+
+For individual control of each component of the GNN pipeline, you can also run each python script individually from within the `GNN_PPI_Network` subdirectory.
+
+### Running Risk Aggregator
+
