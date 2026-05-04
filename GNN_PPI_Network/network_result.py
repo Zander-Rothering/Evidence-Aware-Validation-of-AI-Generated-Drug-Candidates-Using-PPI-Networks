@@ -11,5 +11,7 @@ aggregator = RiskAggregator()
 # Calculate PPI Network risk score from logits
 network_risk = aggregator.aggregate(logits)
 
+print(f'PPI Network Risk Score: {network_risk:.3f}')
+
 with open("gnn_files/network_risk.txt", "w") as f:
     f.write(str(network_risk))
