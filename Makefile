@@ -16,3 +16,10 @@ update_mac:
 
 remove:
 	conda remove -n $(ENV_NAME) --all -y
+
+run_gnn:
+	cd GNN_PPI_Network && python network_result.py
+
+run_compound_matching:
+
+run_nlp_agent:
