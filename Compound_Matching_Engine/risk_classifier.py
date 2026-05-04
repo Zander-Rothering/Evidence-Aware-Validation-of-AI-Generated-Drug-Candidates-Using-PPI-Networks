@@ -40,11 +40,11 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from Compund_Matching_Engine.compound_loader import CompoundLoader
-from Compund_Matching_Engine.fingerprint_encoder import FingerprintEncoder
-from Compund_Matching_Engine.Similarity_scorer import SimilarityScorer
-from Compund_Matching_Engine.Drug_likeness_filter import DrugLikenessFilter
-from Compund_Matching_Engine.Scaffold_extractor import ScaffoldExtractor
+from Compound_Matching_Engine.compound_loader import CompoundLoader
+from Compound_Matching_Engine.fingerprint_encoder import FingerprintEncoder
+from Compound_Matching_Engine.Similarity_scorer import SimilarityScorer
+from Compound_Matching_Engine.Drug_likeness_filter import DrugLikenessFilter
+from Compound_Matching_Engine.Scaffold_extractor import ScaffoldExtractor
 
 
 TIERS = ("HIGH", "MEDIUM", "LOW")
