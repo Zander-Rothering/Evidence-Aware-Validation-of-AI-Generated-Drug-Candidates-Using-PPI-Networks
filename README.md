@@ -44,11 +44,23 @@ It is recommended to install all dependencies using the Makefile command to avoi
 
 ### Running Compound Matching Engine
 
+To run the compound similarity and matching pipeline use:
+
+`make run_compound_matching`
+
+This command executes the Compound Matching Engine, which evaluates structural similarity between the input compound and known reference compounds to generate a similarity-based risk score.
+
 ### Running NLP Literature Agent
+
+To run the NLP agent for risk score extraction from literature use:
+
+`make run_nlp_agent`
+
+This command runs the NLP Literature Agent, which analyzes biomedical literature to extract evidence linking the target protein to disease relevance and generates a literature-based risk score.
 
 ### Running PPI Network GNN
 
-The GNN portion of this pipeline can be executed from the root directory using the provided Makefile. 
+The GNN portion of this pipeline can be executed from the root directory using the provided Makefile.
 
 To run the full GNN pipeline to generate a risk score use:
 
@@ -60,3 +72,10 @@ For individual control of each component of the GNN pipeline, you can also run e
 
 ### Running Risk Aggregator
 
+The full end-to-end pipeline for computing an aggregated risk score for a drug candidate can be executed from the root directory using the provided Makefile.
+
+To run the complete pipeline and generate a final risk score for a drug candidate against the target protein use:
+
+`make run_pipeline`
+
+This command executes the full validation workflow, combining outputs from the Compound Matching Engine (Part 1), the NLP Literature Agent (Part 2A), and the PPI Network GNN (Part 2B). These independent evidence streams are then integrated in Part 3 to produce a final aggregated and explainable risk score for the candidate compound.
