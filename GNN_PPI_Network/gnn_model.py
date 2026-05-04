@@ -21,6 +21,10 @@ class GNNLayer(MessagePassing):
 
     Outputs:
         Tensor: Updated node embeddings of shape [num_nodes, out_channels].
+
+    Framework: PyTorch Geometric (PyG)
+    Reference: PyG "Creating Message Passing Networks"
+    https://pytorch-geometric.readthedocs.io/en/2.6.0/notes/create_gnn.html
     """
 
     def __init__(self, in_channels: int, out_channels: int):

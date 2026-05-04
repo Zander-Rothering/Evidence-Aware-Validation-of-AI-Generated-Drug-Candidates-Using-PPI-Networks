@@ -32,6 +32,8 @@ class PPIGraphBuilder:
         """
         Gets protein interaction network for target protein(s) from STRING DB
 
+        Data source: STRING database (https://string-db.org/)
+
         Parameters:
             identifiers : list
                 List of protein identifiers as gene symbol/IDs used for network seed
@@ -70,6 +72,8 @@ class PPIGraphBuilder:
     ):
         """
         Loads BioGRID data and filter for HMGCR interactions.
+
+        Data source: BioGRID (https://thebiogrid.org/)
 
         Parameters:
             biogrid_file_path : str

@@ -31,6 +31,9 @@ class node_labeler:
         """
         Loads DisGeNET dataset containing gene (protein) disease association scores.
 
+        Data source: DisGeNET database (https://www.disgenet.org/)
+        Accessed via downloaded dataset.
+
         Parameters:
             input_path : str
                 File path to the DisGeNET dataset

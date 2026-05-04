@@ -147,6 +147,9 @@ class feature_extracter:
         """
         Uses Uniprot REST API to extract data for each protein by its gene name
 
+        Data source: UniProt (https://www.uniprot.org/),
+        Data accessed via UniProt REST API.
+
         Parameters:
             save_path : string
                 Save path for csv to store Uniprot data for future access
@@ -438,6 +441,21 @@ class feature_extracter:
         return feature_df
 
     def get_esm_embedding(self, sequence):
+        """
+        Generate a protein sequence embedding using a pretrained ESM model.
+
+        Parameters:
+            sequence : str
+                Amino acid sequence of unique proteins.
+
+        Returns:
+            np.ndarray
+                1D embedding vector representing the protein sequence.
+
+        Data source/model:
+            ESM (Evolutionary Scale Modeling) protein language model developed by
+            Meta AI. See Rives et al., 2021 for details.
+        """
         # Process sequence through the model
         inputs = self.tokenizer(
             sequence, return_tensors="pt", padding=True, truncation=True
@@ -448,6 +466,22 @@ class feature_extracter:
         return outputs.last_hidden_state.mean(dim=1).squeeze().numpy()
 
     def get_go_embedding(self, go_list_str):
+        """
+        Generate a Gene Ontology (GO) embedding using a Node2Vec model.
+
+        Parameters:
+            go_list_str : str or list
+                List of GO term IDs
+
+        Returns:
+            np.ndarray
+                1D embedding vector representing the GO annotations.
+
+        Data source / model:
+            Gene Ontology (GO) annotations embedded using Node2Vec
+            (Grover & Leskovec, 2016) on a GO graph structure.
+            GO data: https://geneontology.org/
+        """
         # Handle string or list input
         go_ids = eval(go_list_str) if isinstance(go_list_str, str) else go_list_str
         vectors = [
