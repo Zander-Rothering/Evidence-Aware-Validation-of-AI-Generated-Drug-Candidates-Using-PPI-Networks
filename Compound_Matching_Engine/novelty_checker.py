@@ -1,21 +1,17 @@
-"""Novelty Checker — Verify that AI-generated SMILES are truly novel.
+"""Novelty Checker — Verify whether AI-generated SMILES are present in PubChem.
 
-Addresses the circularity concern raised in office hours:
-MolGPT is trained on known statins (ChEMBL), so generated SMILES
-could simply reproduce existing drugs. This module gates the pipeline
-by querying PubChem to confirm each candidate is genuinely novel
-(not already catalogued in public databases).
+This module is a standalone Part 1 utility. It is not automatically called by
+MatchingEngine in the current MVP pipeline. Instead, downstream orchestrators
+such as Evidence_Aggregation/validation_pipeline.py may import NoveltyChecker
+to annotate final CSV/JSON outputs with PubChem-level novelty metadata.
 
-Note: MolGPT's built-in check_novelty() only compares against the
-training set. This module goes further by checking against the
-entire PubChem database via REST API.
+Note:
+- Girish's *_validated_novel.csv files remove exact ChEMBL duplicates using
+  tanimoto_max_chembl < 1.0.
+- NoveltyChecker performs a stricter PubChem InChIKey lookup and reports whether
+  the candidate is already catalogued in PubChem.
 
-    check_novelty=True   ->  call PubChem API, filter out known compounds
-    check_novelty=False  ->  skip API, assume everything is novel
-                             (use this during development to avoid slow API calls)
-
-In short, this screen ensures every molecule that enters the pipeline is genuinely new, when needed.
-Developed with AI assistance (Claude, Anthropic) for syntax support.
+Developed with AI assistance for syntax support.
 """
 
 import requests
