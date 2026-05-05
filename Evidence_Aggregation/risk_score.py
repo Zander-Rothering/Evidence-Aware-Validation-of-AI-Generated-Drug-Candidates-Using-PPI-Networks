@@ -14,6 +14,9 @@ class RiskScore:
     risk_tier : str
         Part 3 final HIGH/MEDIUM/LOW classification from EvidenceAggregator.
 
+    query_smiles : str
+        Input AI-generated SMILES from Part 1 MatchResult.
+
     similarity_score : float
         Part 1 raw A5 Tanimoto similarity from MatchResult.
 
@@ -53,6 +56,7 @@ class RiskScore:
 
     # Final HIGH/MEDIUM/LOW classification based on combined_score and stream agreement.
     risk_tier: str = ""
+    query_smiles: str = ""
     similarity_score: float = 0.0
     literature_risk_score: float = 0.0
     network_risk_score: float = 0.0
@@ -75,6 +79,7 @@ class RiskScore:
         """Return a plain dict for reporting, JSON export, or notebooks."""
         return {
             "risk_tier": self.risk_tier,
+            "query_smiles": self.query_smiles,
             "similarity_score": round(self.similarity_score, 4),
             "literature_risk_score": round(self.literature_risk_score, 4),
             "network_risk_score": round(self.network_risk_score, 4),

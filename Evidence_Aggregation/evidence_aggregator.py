@@ -42,6 +42,7 @@ class EvidenceAggregator:
 
         return RiskScore(
             risk_tier=tier,                                         # Part 3 final HIGH / MEDIUM / LOW classification.
+            query_smiles=match_result.query_smiles,                 # Original AI-generated input SMILES.
             similarity_score=match_result.tanimoto,                 # Part 1 raw A5 Tanimoto similarity, kept for reporting.
             literature_risk_score=literature_result.literature_risk_score,  # Part 2A NLP literature risk score.
             network_risk_score=network_risk,                        # Part 2B PPI/GNN network risk score.
