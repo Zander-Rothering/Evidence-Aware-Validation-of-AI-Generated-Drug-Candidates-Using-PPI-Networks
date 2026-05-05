@@ -1,4 +1,4 @@
-from rdkit import Chem
+from rdkit import Chem, DataStructs
 
 try:
     from .compound_loader import CompoundLoader
@@ -53,6 +53,7 @@ class MatchingEngine:
         # Load corrected HMGCR reference compounds from ChEMBL
         self.loader = CompoundLoader(target_chembl_id=target_chembl_id)
         self.named_statin_by_smiles = {}
+        self.fallback_statins = self.loader._load_fallback_statins()
 
         # Add named statins so downstream PubMed/SIDER steps can use drug names
         self.library = self.with_named_statins(self.loader.load_reference_library())
@@ -84,6 +85,12 @@ class MatchingEngine:
         nn_mol = Chem.MolFromSmiles(similarity.nn_smiles)
         scaffold_result = self.scaffold_extractor.extract(mol, nn_mol) if nn_mol else None
         literature_name = self.resolve_literature_name(similarity.nn_name, similarity.nn_smiles)
+        # Step 1: literature_name only converts CHEMBL IDs when the nearest-neighbor
+        # SMILES exactly matches a known fallback statin.
+        # Step 2: sider_lookup_name is SIDER/NLP-only. If the name is still a CHEMBL ID,
+        # use the nearest marketed fallback statin as a readable safety/literature seed.
+        # The true A5 nn_name remains similarity.nn_name in MatchResult.
+        sider_lookup_name = self.resolve_sider_lookup_name(literature_name, query_fp)
         rule_tier = self.assign_rule_tier(filter_result, similarity)
         similarity_risk_score = self.compute_similarity_risk_score(similarity)
 
@@ -98,9 +105,10 @@ class MatchingEngine:
             except Exception as e:
                 print(f"[A10c] RiskClassifier prediction failed: {e}")
 
-        # A9: use the readable literature name for SIDER when the nearest ChEMBL ID
-        # is actually a known statin such as atorvastatin.
-        sider_records = self.loader.load_sider_risks(literature_name, similarity.nn_score)
+        # A9: inherit adverse-effect seeds from the SIDER/NLP lookup name.
+        # This may be an exact statin name or a marketed-statin fallback when the
+        # true nearest neighbor is an unresolved CHEMBL ID.
+        sider_records = self.loader.load_sider_risks(sider_lookup_name, similarity.nn_score)
 
         # A10c: combine A10a rule tier with A10b ANN evidence.
         final_tier, confidence_flag = self.combine_rule_and_ml(rule_tier, ml_tier, ml_proba)
@@ -122,7 +130,7 @@ class MatchingEngine:
             filter_result=filter_result,
             sider_risks=[record["effect"] for record in sider_records],
             sider_risk_records=sider_records,
-            search_terms=self.build_search_terms(literature_name),
+            search_terms=self.build_search_terms(sider_lookup_name),
             risk_tier=final_tier,
             ml_tier=ml_tier,
             ml_proba=ml_proba,
@@ -136,7 +144,7 @@ class MatchingEngine:
         seen_smiles = {row[1] for row in combined}
 
         # ChEMBL rows often have CHEMBL IDs; fallback statins provide readable drug names
-        for row in self.loader._load_fallback_statins():
+        for row in self.fallback_statins:
             # Store a SMILES lookup so CHEMBL ID can be recognized as drug name.
             self.named_statin_by_smiles[self.canonical_smiles(row[1])] = row[0]
             if row[1] not in seen_smiles:
@@ -147,6 +155,32 @@ class MatchingEngine:
     def resolve_literature_name(self, nn_name: str, nn_smiles: str) -> str:
         """Return a readable drug name when a ChEMBL nearest neighbor matches a named statin."""
         return self.named_statin_by_smiles.get(self.canonical_smiles(nn_smiles), nn_name.strip())
+
+    def resolve_sider_lookup_name(self, literature_name: str, query_fp) -> str:
+        """
+        Return a SIDER/NLP lookup seed without changing the true A5 nearest neighbor.
+
+        If the input name is already readable, use it.
+        If it is still a CHEMBL ID, use the closest fallback marketed statin by
+        Tanimoto to the query fingerprint, but only when similarity >= 0.40.
+        """
+        name = literature_name.strip()
+        if not name.lower().startswith("chembl"):
+            return name
+
+        best_name = name
+        best_score = -1.0
+        for fallback_name, _smiles, _ic50, fallback_fp in self.fallback_statins:
+            if fallback_fp is None:
+                continue
+            score = DataStructs.TanimotoSimilarity(query_fp, fallback_fp)
+            if score > best_score:
+                best_score = score
+                best_name = fallback_name
+
+        if best_score >= 0.40:
+            return best_name
+        return name
 
     def build_search_terms(self, literature_name: str) -> str:
         """Build PubMed-friendly search terms for the NLPAgent."""
