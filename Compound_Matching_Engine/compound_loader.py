@@ -46,7 +46,7 @@ class CompoundLoader:
         self.fingerprint_generator = GetMorganGenerator(radius=2, fpSize=2048)
 
     # Cache file lives next to compound_loader.py:
-    # Compund_Matching_Engine/chembl_cache.pkl
+    # Compound_Matching_Engine/chembl_cache.pkl
     _CACHE_FILE = os.path.join(os.path.dirname(__file__), "chembl_cache.pkl")
 
     def load_reference_library(self):
@@ -63,7 +63,7 @@ class CompoundLoader:
           3. If ChEMBL fails             -> use fallback statins, do NOT cache
              (so the next run retries ChEMBL when the server is back).
 
-        Cache location: Compund_Matching_Engine/chembl_cache.pkl
+        Cache location: Compound_Matching_Engine/chembl_cache.pkl
         (same directory as this file, excluded from git).
         """
         # 1. Try loading from cache
@@ -178,7 +178,7 @@ class CompoundLoader:
     _sider_df_cache = None
 
     # SIDER side-effect file downloaded from http://sideeffects.embl.de/download/
-    # and placed at Compund_Matching_Engine/sider_data/meddra_all_se.tsv.gz
+    # and placed at Compound_Matching_Engine/sider_data/meddra_all_se.tsv.gz
     _SIDER_FILE = os.path.join(os.path.dirname(__file__), "sider_data", "meddra_all_se.tsv.gz")
 
     # SIDER/STITCH compound id <-> drug name (from sideeffects.embl.de)
