@@ -52,6 +52,7 @@ class MatchResult:
     # Adds fields used by Part 2A/2B/3.
     risk_tier: str = ""                                   # Part 1 final tier: HIGH / MEDIUM / LOW
     sider_risks: list[str] = field(default_factory=list)  # A9 SIDER risks used as NLP search seeds
+    sider_risk_records: list[dict] = field(default_factory=list) # A9 tagged SIDER records (effect/tag/tanimoto) for explainability
     search_terms: str = ""                                # A8/A5-derived PubMed search terms for `nlp_agent.py`
     target: str = "HMGCR"                                 # Target protein context for Part 2A and 2B
     ml_proba: dict = field(default_factory=dict)          # A10b ML probabilities (not yet implemented)
@@ -75,6 +76,7 @@ class MatchResult:
             # ---- For integration with Part 2A/2B/3 ------
             "risk_tier":           self.risk_tier,
             "sider_risks":         self.sider_risks,
+            "sider_risk_records":  self.sider_risk_records,
             "search_terms":        self.search_terms,
             "target":              self.target,
             "ml_proba":            self.ml_proba,

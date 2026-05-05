@@ -121,6 +121,7 @@ class MatchingEngine:
             nn_scaffold=scaffold_result.nn_scaffold if scaffold_result else "",
             filter_result=filter_result,
             sider_risks=[record["effect"] for record in sider_records],
+            sider_risk_records=sider_records,
             search_terms=self.build_search_terms(literature_name),
             risk_tier=final_tier,
             ml_tier=ml_tier,
