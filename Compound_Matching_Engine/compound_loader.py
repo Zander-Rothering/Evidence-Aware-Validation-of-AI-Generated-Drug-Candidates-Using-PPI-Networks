@@ -154,8 +154,8 @@ class CompoundLoader:
     # ----------
     # Activity 9 — SIDER inherited adverse-effect lookup 
 
-    # Tier 3 fallback: known statin-class adverse effects.
-    # Used only when both PubChem API and local SIDER file fail.
+    # Tier 4 fallback: known statin-class adverse effects.
+    # Used only when drug_names.tsv, PubChem CID paths, and SIDER file join fail.
     _SIDER_FALLBACK = {
         "atorvastatin":  ["myopathy", "hepatotoxicity", "rhabdomyolysis",
                           "diabetes mellitus", "peripheral neuropathy"],
@@ -181,8 +181,13 @@ class CompoundLoader:
     # and placed at Compund_Matching_Engine/sider_data/meddra_all_se.tsv.gz
     _SIDER_FILE = os.path.join(os.path.dirname(__file__), "sider_data", "meddra_all_se.tsv.gz")
 
+    # SIDER/STITCH compound id <-> drug name (from sideeffects.embl.de)
+    _SIDER_NAMES_FILE = os.path.join(os.path.dirname(__file__), "sider_data", "drug_names.tsv")
+
+    _sider_name_to_ids_cache = None
+
     def _name_to_cid(self, drug_name):
-        """Tier 1 helper: resolve a drug name to a PubChem CID via REST API.
+        """Tier 2 helper: resolve a drug name to a PubChem CID via REST API.
 
         Returns the integer CID, or None on any failure.
         """
@@ -199,7 +204,7 @@ class CompoundLoader:
             return None
 
     def _load_sider_df(self):
-        """Tier 2 helper: lazily load and cache the SIDER TSV file.
+        """Lazily load and cache the SIDER meddra side-effect TSV.
 
         Returns the filtered dataframe (meddra_type == 'PT' only),
         or None if the file does not exist.
@@ -226,7 +231,7 @@ class CompoundLoader:
         except Exception:
             return None
 
-    # Offline name->CID map for common statins so Tier 2 can work
+    # Offline name->CID map for common statins so Tier 3 can work
     # even when the PubChem API is unreachable.
     _NAME_TO_CID_FALLBACK = {
         "atorvastatin": 60823,
@@ -247,50 +252,99 @@ class CompoundLoader:
         """
         return f"CID1{cid:08d}"
 
+    def _load_sider_name_to_ids(self):
+        """Load SIDER drug_names.tsv as a lowercase drug-name -> list[SIDER ID] map."""
+        if CompoundLoader._sider_name_to_ids_cache is not None:
+            return CompoundLoader._sider_name_to_ids_cache
+
+        if not os.path.isfile(self._SIDER_NAMES_FILE):
+            CompoundLoader._sider_name_to_ids_cache = {}
+            return CompoundLoader._sider_name_to_ids_cache
+
+        try:
+            df = pd.read_csv(
+                self._SIDER_NAMES_FILE,
+                sep="\t",
+                header=None,
+                names=["sider_id", "drug_name"],
+            )
+            name_to_ids: dict[str, list[str]] = {}
+            for _, row in df.iterrows():
+                sid = str(row["sider_id"]).strip()
+                drug = str(row["drug_name"]).strip().lower()
+                if not sid or not drug:
+                    continue
+                name_to_ids.setdefault(drug, []).append(sid)
+            CompoundLoader._sider_name_to_ids_cache = name_to_ids
+            return name_to_ids
+        except Exception:
+            CompoundLoader._sider_name_to_ids_cache = {}
+            return CompoundLoader._sider_name_to_ids_cache
+
+    def _effects_for_sider_ids(self, sider_ids):
+        """Return unique PT side effects for one or more SIDER/STITCH IDs."""
+        if not sider_ids:
+            return []
+        sider_df = self._load_sider_df()
+        if sider_df is None:
+            return []
+        id_set = set(sider_ids)
+        hits = sider_df[
+            sider_df["stitch_flat"].isin(id_set) | sider_df["stitch_stereo"].isin(id_set)
+        ]
+        if hits.empty:
+            return []
+        return hits["side_effect_name"].unique().tolist()
+
     def _query_sider(self, nn_name):
         """Look up known adverse effects for a drug name.
 
-        Uses a 3-tier fallback strategy:
-          Tier 1 — PubChem API (name -> CID) -> STITCH ID -> SIDER file
-          Tier 2 — Offline CID map -> STITCH ID -> SIDER file (no API)
-          Tier 3 — Hardcoded statin side-effect dictionary
+        Uses a 4-tier fallback strategy:
+          Tier 1 — SIDER drug_names.tsv (name -> STITCH IDs) -> SIDER side-effect file
+          Tier 2 — PubChem API (name -> CID) -> STITCH ID -> SIDER file
+          Tier 3 — Offline CID map -> STITCH ID -> SIDER file (no API)
+          Tier 4 — Curated statin hardcoded fallback
 
         All tiers return list[str] of side-effect names.
         """
         key = nn_name.strip().lower()
 
-        # Tier 1: PubChem API -> CID -> SIDER file 
+        # Tier 1: drug_names.tsv -> SIDER/STITCH IDs -> side-effect file
+        name_to_ids = self._load_sider_name_to_ids()
+        sider_ids = name_to_ids.get(key, [])
+        effects = self._effects_for_sider_ids(sider_ids)
+        if effects:
+            print(
+                f"[SIDER Tier 1] {nn_name} -> {len(effects)} effects from drug_names.tsv"
+            )
+            return effects
+
+        # Tier 2: PubChem API -> CID -> SIDER file
         cid = self._name_to_cid(key)
         if cid is not None:
-            sider_df = self._load_sider_df()
-            if sider_df is not None:
-                stitch_id = self._cid_to_stitch(cid)
-                hits = sider_df[sider_df["stitch_flat"] == stitch_id]
-                if not hits.empty:
-                    effects = hits["side_effect_name"].unique().tolist()
-                    print(f"[SIDER Tier 1] {nn_name} -> CID {cid} -> "
-                          f"{len(effects)} effects from SIDER file")
-                    return effects
+            stitch_id = self._cid_to_stitch(cid)
+            effects = self._effects_for_sider_ids([stitch_id])
+            if effects:
+                print(f"[SIDER Tier 2] {nn_name} -> CID {cid} -> "
+                      f"{len(effects)} effects from SIDER file")
+                return effects
 
-        # Tier 2: offline CID map -> SIDER file (no API) 
+        # Tier 3: offline CID map -> SIDER file (no API)
         fallback_cid = self._NAME_TO_CID_FALLBACK.get(key)
         if fallback_cid is not None and fallback_cid != cid:
-            sider_df = self._load_sider_df()
-            if sider_df is not None:
-                stitch_id = self._cid_to_stitch(fallback_cid)
-                hits = sider_df[sider_df["stitch_flat"] == stitch_id]
-                if not hits.empty:
-                    effects = hits["side_effect_name"].unique().tolist()
-                    print(f"[SIDER Tier 2] {nn_name} -> CID {fallback_cid} -> "
-                          f"{len(effects)} effects from SIDER file (offline CID)")
-                    return effects
+            stitch_id = self._cid_to_stitch(fallback_cid)
+            effects = self._effects_for_sider_ids([stitch_id])
+            if effects:
+                print(f"[SIDER Tier 3] {nn_name} -> CID {fallback_cid} -> "
+                      f"{len(effects)} effects from SIDER file (offline CID)")
+                return effects
 
-        # Tier 3: hardcoded fallback 
+        # Tier 4: hardcoded fallback
         # Only return effects for drugs explicitly known.
         # For unknown drugs, return an empty list rather than
         # guessing statin-specific risks that may not apply.
         effects = list(self._SIDER_FALLBACK.get(key, []))
-        print(f"[SIDER Tier 3] {nn_name} -> {len(effects)} effects "
+        print(f"[SIDER Tier 4] {nn_name} -> {len(effects)} effects "
               f"from hardcoded fallback")
         return effects
 
