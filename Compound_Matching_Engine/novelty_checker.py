@@ -15,8 +15,12 @@ Developed with AI assistance for syntax support.
 """
 
 import requests
-from rdkit import Chem
+from rdkit import Chem, RDLogger
 from rdkit.Chem.inchi import MolToInchi, InchiToInchiKey
+
+# Suppress noisy InChI stereochemistry warnings such as:
+# "WARNING: Omitted undefined stereo"
+RDLogger.DisableLog("rdApp.warning")
 
 
 class NoveltyChecker:
