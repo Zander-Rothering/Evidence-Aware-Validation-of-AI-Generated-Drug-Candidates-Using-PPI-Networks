@@ -76,10 +76,16 @@ def build_literature_result(
     manually wiring PubMedSearcher, NERExtractor, SignalClassifier, and scorer.
     """
     # Local imports keep this module lightweight when only the `LiteratureResult` container is needed.
-    from ner_extractor import NERExtractor
-    from pubmed_searcher import PubMedSearcher
-    from signal_classifier import SignalClassifier
-    from literature_risk_scorer import LiteratureRiskScorer
+    try:
+        from .ner_extractor import NERExtractor
+        from .pubmed_searcher import PubMedSearcher
+        from .signal_classifier import SignalClassifier
+        from .literature_risk_scorer import LiteratureRiskScorer
+    except ImportError:
+        from ner_extractor import NERExtractor
+        from pubmed_searcher import PubMedSearcher
+        from signal_classifier import SignalClassifier
+        from literature_risk_scorer import LiteratureRiskScorer
 
     searcher = PubMedSearcher(max_results=max_results, email=email)
     hit = searcher.search(query, sider_risks=sider_risks, target=target)

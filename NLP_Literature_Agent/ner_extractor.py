@@ -18,7 +18,10 @@ import re
 import torch
 from transformers import pipeline as hf_pipeline
 
-from pubmed_searcher import PubMedSearcher
+try:
+    from .pubmed_searcher import PubMedSearcher
+except ImportError:
+    from pubmed_searcher import PubMedSearcher
 
 MODEL_NAME = "d4data/biomedical-ner-all"
 

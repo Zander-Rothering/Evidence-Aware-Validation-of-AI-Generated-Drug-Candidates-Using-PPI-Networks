@@ -9,13 +9,20 @@ Developed with AI assistance for syntax support.
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
-from Compund_Matching_Engine import MatchingEngine, MatchResult
+from Compound_Matching_Engine import MatchingEngine, MatchResult
 
-from pubmed_searcher import PubMedSearcher
-from ner_extractor import NERExtractor
-from signal_classifier import SignalClassifier
-from literature_risk_scorer import LiteratureRiskScorer
-from literature_result import LiteratureResult
+try:
+    from .pubmed_searcher import PubMedSearcher
+    from .ner_extractor import NERExtractor
+    from .signal_classifier import SignalClassifier
+    from .literature_risk_scorer import LiteratureRiskScorer
+    from .literature_result import LiteratureResult
+except ImportError:
+    from pubmed_searcher import PubMedSearcher
+    from ner_extractor import NERExtractor
+    from signal_classifier import SignalClassifier
+    from literature_risk_scorer import LiteratureRiskScorer
+    from literature_result import LiteratureResult
 
 
 class NLPAgent:

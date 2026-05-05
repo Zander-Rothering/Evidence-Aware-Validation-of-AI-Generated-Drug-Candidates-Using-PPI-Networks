@@ -13,9 +13,14 @@ Developed with AI assistance for syntax support.
 
 import numpy as np
 
-from ner_extractor import NERExtractor
-from pubmed_searcher import PubMedSearcher
-from signal_classifier import SignalClassifier
+try:
+    from .ner_extractor import NERExtractor
+    from .pubmed_searcher import PubMedSearcher
+    from .signal_classifier import SignalClassifier
+except ImportError:
+    from ner_extractor import NERExtractor
+    from pubmed_searcher import PubMedSearcher
+    from signal_classifier import SignalClassifier
 
 
 # Evidence level weights — direct compound hit scores higher than fallback

@@ -14,8 +14,13 @@ Developed with AI assistance for syntax support.
 """
 import argparse
 
-from ner_extractor import NERExtractor
-from pubmed_searcher import PubMedSearcher
+try:
+    from .ner_extractor import NERExtractor
+    from .pubmed_searcher import PubMedSearcher
+except ImportError:
+    from ner_extractor import NERExtractor
+    from pubmed_searcher import PubMedSearcher
+
 from rich.console import Console
 from rich.table import Table
 
