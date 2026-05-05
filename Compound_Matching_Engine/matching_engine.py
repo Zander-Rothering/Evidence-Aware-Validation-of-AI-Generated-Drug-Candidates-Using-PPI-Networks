@@ -85,6 +85,7 @@ class MatchingEngine:
         scaffold_result = self.scaffold_extractor.extract(mol, nn_mol) if nn_mol else None
         literature_name = self.resolve_literature_name(similarity.nn_name, similarity.nn_smiles)
         rule_tier = self.assign_rule_tier(filter_result, similarity)
+        similarity_risk_score = self.compute_similarity_risk_score(similarity)
 
         # A10b: optional ANN prediction stored as supporting evidence.
         ml_tier = ""
@@ -111,6 +112,7 @@ class MatchingEngine:
             nn_smiles=similarity.nn_smiles,
             nn_ic50=similarity.nn_ic50,
             tanimoto=similarity.nn_score,
+            similarity_risk_score=similarity_risk_score,
             shared_atoms=scaffold_result.shared_atoms if scaffold_result else 0,
             novel_atoms=scaffold_result.novel_atoms if scaffold_result else 0,
             shared_pct=scaffold_result.shared_pct if scaffold_result else 0.0,
@@ -165,6 +167,11 @@ class MatchingEngine:
             return "LOW"
 
         return "MEDIUM"
+
+    def compute_similarity_risk_score(self, similarity) -> float:
+        """Convert A5 Tanimoto similarity into a 0-1 novelty/uncertainty risk signal."""
+        risk = 1.0 - float(similarity.nn_score)
+        return round(max(0.0, min(1.0, risk)), 4)
 
     def combine_rule_and_ml(self, rule_tier: str, ml_tier: str, ml_proba: dict) -> tuple[str, str]:
         """A10c: combine rule and ANN verdicts with conservative escalation."""
