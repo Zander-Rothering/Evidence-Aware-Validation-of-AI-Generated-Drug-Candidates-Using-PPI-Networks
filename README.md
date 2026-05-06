@@ -79,3 +79,5 @@ To run the complete pipeline and generate a final risk score for a drug candidat
 `make run_pipeline`
 
 This command executes the full validation workflow, combining outputs from the Compound Matching Engine (Part 1), the NLP Literature Agent (Part 2A), and the PPI Network GNN (Part 2B). These independent evidence streams are then integrated in Part 3 to produce a final aggregated and explainable risk score for the candidate compound.
+
+## Pipeline Architecture
