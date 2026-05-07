@@ -48,7 +48,7 @@ To run the compound similarity and matching pipeline use:
 
 `make run_compound_matching`
 
-This command executes the Compound Matching Engine, which evaluates structural similarity between the input compound and known reference compounds to generate a similarity-based risk score.
+This command runs `Compound_Matching_Engine/matching_engine.py`, which executes the Compound Matching Engine end-to-end on a demo SMILES and prints the resulting `MatchResult`: nearest-neighbor reference compound, Tanimoto similarity, novelty flag, rule-based and ML-based risk tiers, SIDER seeds, PubMed search terms, and the final similarity-based risk score.
 
 ### Running NLP Literature Agent
 
@@ -56,7 +56,7 @@ To run the NLP agent for risk score extraction from literature use:
 
 `make run_nlp_agent`
 
-This command runs the NLP Literature Agent, which analyzes biomedical literature to extract evidence linking the target protein to disease relevance and generates a literature-based risk score.
+This command runs `NLP_Literature_Agent/nlp_agent.py`, which executes the full NLP Literature Agent end-to-end on a demo SMILES. It first uses the Compound Matching Engine (Part 1) to derive nearest-neighbor search terms, then runs the B1–B4 NLP pipeline (PubMed search -> biomedical NER -> signal classification -> literature risk scoring) and prints the resulting `LiteratureResult`: search terms, target, literature risk score, evidence confidence and level, and the top extracted safety/efficacy signals.
 
 ### Running PPI Network GNN
 
