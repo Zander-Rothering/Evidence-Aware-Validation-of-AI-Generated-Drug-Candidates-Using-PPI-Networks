@@ -266,3 +266,24 @@ if __name__ == "__main__":
     broken = "CC(C)c1ccc(INVALID!!!)cc1"
     mol3, status3 = parse_smiles(broken)
     print(f"Broken SMILES: {status3}")
+
+    # End-to-end MatchingEngine demo: SMILES -> MatchResult.
+    # Uses a known HMGCR-active pyrrole-core statin scaffold from MolGPT for representative Part 1 output.
+    print("\nMatching Engine result")
+    engine = MatchingEngine()
+    demo_smiles = "CC(=O)c1c(F)c(-c2ccc(F)cc2)c(-c2ccc(F)cc2)n1CCC(O)CC(O)CC(=O)O"
+    result = engine.run(demo_smiles)
+    print(f"query_smiles:          {result.query_smiles}")
+    print(f"nn_name:               {result.nn_name}")
+    print(f"nn_smiles:             {result.nn_smiles}")
+    print(f"tanimoto:              {result.tanimoto:.4f}")
+    print(f"is_novel:              {result.is_novel}")
+    print(f"risk_tier (rule):      {result.risk_tier}")
+    print(f"ml_tier:               {result.ml_tier}")
+    print(f"confidence_flag:       {result.confidence_flag}")
+    print(f"search_terms:          {result.search_terms}")
+    print(f"target:                {result.target}")
+    sider_preview = result.sider_risks[:5]
+    sider_suffix = "..." if len(result.sider_risks) > 5 else ""
+    print(f"sider_risks ({len(result.sider_risks)}): {sider_preview}{sider_suffix}")
+    print(f"similarity_risk_score: {result.similarity_risk_score:.4f}")

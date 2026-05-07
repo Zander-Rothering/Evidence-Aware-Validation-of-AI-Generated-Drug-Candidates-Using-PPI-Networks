@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from .Filter_result import FilterResult
+try:
+    from .Filter_result import FilterResult
+except ImportError:
+    from Filter_result import FilterResult
 
 
 @dataclass
