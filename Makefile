@@ -27,4 +27,4 @@ run_nlp_agent:
 	cd NLP_Literature_Agent && python literature_result.py
 
 run_pipeline:
-	cd Evidence_Aggregation && python risk_score.py
+	cd Evidence_Aggregation && python validation_pipeline.py
