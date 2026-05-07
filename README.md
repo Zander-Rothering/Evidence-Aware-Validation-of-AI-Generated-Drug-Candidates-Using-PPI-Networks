@@ -78,6 +78,6 @@ To run the complete pipeline and generate a final risk score for a drug candidat
 
 `make run_pipeline`
 
-This command executes the full validation workflow, combining outputs from the Compound Matching Engine (Part 1), the NLP Literature Agent (Part 2A), and the PPI Network GNN (Part 2B). These independent evidence streams are then integrated in Part 3 to produce a final aggregated and explainable risk score for the candidate compound.
+This command runs `Evidence_Aggregation/validation_pipeline.py`, the final validation orchestrator. It executes the full validation workflow, combining outputs from the Compound Matching Engine (Part 1), the NLP Literature Agent (Part 2A), and the PPI Network GNN (Part 2B). These independent evidence streams are then integrated in Part 3 to produce a final aggregated and explainable risk score for the candidate compound. On completion, it writes `validation_results.csv` and `validation_results.json` (one row/record per candidate) to the `Evidence_Aggregation/` directory.
 
 ## Pipeline Architecture
