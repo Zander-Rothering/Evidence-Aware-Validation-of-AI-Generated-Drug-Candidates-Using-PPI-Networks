@@ -40,6 +40,34 @@ To remove the environment and all dependencies run:
 
 It is recommended to install all dependencies using the Makefile command to avoid installation issues. If issues arise when installing dependencies all may be installed via `pip` with the exception of `RDKit` which should be installed via `conda-forge`.
 
+## Repository Structure
+
+`Compound_Matching_Engine/` SMILES-based compound similarity and risk scoring pipeline
+
+`NLP_Literature_Agent/` Literature-based compound risk scoring pipeline
+
+`GNN_PPI_Network/` PPI network construction and GNN risk scoring pipeline
+
+`Evidence_Aggregation/` Evidence compiler to determine final risk score for pipeline
+
+## Pipeline Architecture
+
+### Compound Matching Engine Architecture
+
+### NLP Agent Architecture
+
+The NLP Literature Agent converts each `MatchResult` into a literature-based risk score using nearest-neighbor compound similarity, HMGCR target context, and SIDER-derived safety signals. Nearest-neighbor ChEMBL identifiers are converted into readable drug names, with exact statin SMILES matched directly and unresolved compounds assigned to the closest marketed statin only when Tanimoto similarity is at least 0.40, preventing weakly related molecules from inheriting overly specific literature evidence. PubMed abstracts are retrieved through the NCBI Entrez using fallback queries, ranging from compound specific HMGCR searches to broader statin class safety literature. Retrieved abstracts are processed using the pretrained biomedical NER model `d4data/biomedical-ner-all` to extract biomedical entities and safety-related signals, which are aggregated by the `LiteratureRiskScorer` into a normalized 0–1 literature risk score for the final Evidence Aggregator.
+
+### PPI GNN Architecture
+
+The PPI GNN was developed to model biological risk across interacting proteins, using the statin target protein HMGCR as a proof of concept seed for network construction. The PPI network is built using interaction data from STRING and BioGRID, where nodes represent proteins and edges represent protein–protein interactions. Protein features are retrieved from UniProt and embedded using pretrained ESM-2 sequence embeddings and Node2Vec Gene Ontology embeddings. These features, along with edge attribute interaction scores and experimental system types, were combined into a PyTorch Geometric Data object for training. Note that the current architecture does not utilize edge attributes during GNN training.
+
+The GNN was implemented using the PyTorch Geometric message-passing framework and consists of three graph convolution layers with ReLU activations and dropout regularization. Node labels are generated from DisGeNET disease-association scores and used for binary node classification. The model is trained using Adam optimization and cross-entropy loss, producing node-level risk probabilities that are aggregated into an overall biological network risk score.
+
+### Risk Evidence Argregation Architecture
+
+The Evidence Aggregator serves as the final decision layer of the pipeline, combining all evidence streams into a single unified risk score. Individual risk scores from each component are weighted and integrated using a normalized weighted sum. The resulting score is then assigned to one of three final risk tiers, HIGH/MEDIUM/LOW, based on both the overall score and agreement between the individual evidence streams. Final predictions, along with all intermediate evidence are exported to a CSV file.
+
 ## Running Pipeline
 
 ### Running Compound Matching Engine
@@ -66,7 +94,7 @@ To run the full GNN pipeline to generate a risk score use:
 
 `make run_gnn`
 
-This command executes the main script located in GNN_PPI_Network/network_result.py and handles the end-to-end workflow.
+This command executes the main script located in GNN_PPI_Network/network_result.py and handles the end-to-end workflow. On compeletion, it writes `network_risk.txt` to the `GNN_PPI_Network/gnn_files` directory.
 
 For individual control of each component of the GNN pipeline, you can also run each python script individually from within the `GNN_PPI_Network` subdirectory.
 
@@ -80,4 +108,12 @@ To run the complete pipeline and generate a final risk score for a drug candidat
 
 This command runs `Evidence_Aggregation/validation_pipeline.py`, the final validation orchestrator. It executes the full validation workflow, combining outputs from the Compound Matching Engine (Part 1), the NLP Literature Agent (Part 2A), and the PPI Network GNN (Part 2B). These independent evidence streams are then integrated in Part 3 to produce a final aggregated and explainable risk score for the candidate compound. On completion, it writes `validation_results.csv` and `validation_results.json` (one row/record per candidate) to the `Evidence_Aggregation/` directory.
 
-## Pipeline Architecture
+## Pipeline Results
+
+### Compound Matching Results
+
+### NLP Agent Results
+
+### GNN Results
+
+### Evidence Aggregation Results
