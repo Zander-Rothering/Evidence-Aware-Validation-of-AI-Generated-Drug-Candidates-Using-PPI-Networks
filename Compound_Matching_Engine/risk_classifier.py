@@ -6,7 +6,7 @@ to load + predict.
 
 What this model does: maps 16 molecular features (similarity, drug-likeness,
 structural alerts, scaffold overlap, etc.) to a 3-class risk tier with
-calibrated probabilities, so downstream code can sort or threshold candidates.
+model probabilities, so downstream code can sort or threshold candidates.
 
 Training data: MolGPT-generated v2 molecules only (v2_validated.csv +
 v2_T08_validated.csv), canonicalized and de-duplicated, with any SMILES
@@ -21,19 +21,25 @@ Why ML on top of the weak_label rule:
 1. Outputs probabilities (for example: LOW=0.51 vs LOW=0.99) instead of a hard tier.
 2. Learns non-linear feature interactions the rule's hard thresholds cannot.
 
+Modeling note: A10b is a small tabular ANN over 16 engineered features, not a graph model.
+Even though it's an ANN, StandardScaler and stratified k-fold CV still apply because 
+the dataset is small and weak-labeled, which are the same constraints as classical tabular ML.
+
 Developed with AI assistance for syntax support.
 """
+
 import sys
-from pathlib import Path
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import pandas as pd
 import torch
 import torch.nn as nn
-from torch.utils.data import TensorDataset, DataLoader
+import matplotlib.pyplot as plt
+from rdkit import Chem
 from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.preprocessing import StandardScaler
-from rdkit import Chem
+from torch.utils.data import DataLoader, TensorDataset
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -41,57 +47,47 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from Compound_Matching_Engine.compound_loader import CompoundLoader
-from Compound_Matching_Engine.fingerprint_encoder import FingerprintEncoder
-from Compound_Matching_Engine.Similarity_scorer import SimilarityScorer
 from Compound_Matching_Engine.Drug_likeness_filter import DrugLikenessFilter
+from Compound_Matching_Engine.fingerprint_encoder import FingerprintEncoder
 from Compound_Matching_Engine.Scaffold_extractor import ScaffoldExtractor
+from Compound_Matching_Engine.Similarity_scorer import SimilarityScorer
 
 
 TIERS = ("HIGH", "MEDIUM", "LOW")
 FEATURES = [
-    "tanimoto", "potency_score", "pains_flag", "brenk_flag",
-    "lipinski_violations", "qed", "mw", "logp", "hbd", "hba",
-    "tpsa", "rot_bonds", "scaffold_similarity", "shared_pct",
-    "novel_atoms", "composite_risk",
+    "tanimoto",
+    "potency_score",
+    "pains_flag",
+    "brenk_flag",
+    "lipinski_violations",
+    "qed",
+    "mw",
+    "logp",
+    "hbd",
+    "hba",
+    "tpsa",
+    "rot_bonds",
+    "scaffold_similarity",
+    "shared_pct",
+    "novel_atoms",
+    "composite_risk",
 ]
+
+DATA_DIR = Path(__file__).resolve().parents[1]
 MODEL_PATH = Path(__file__).resolve().parent / "risk_classifier_ann.pt"
+TRAINING_CURVE_PATH = Path(__file__).resolve().parent / "risk_classifier_training_curve.png"
 
-
-def featurize(row_or_smiles, helpers: dict) -> dict | None:
-    """SMILES str OR row dict -> dict with all 16 features. Returns None if
-    the SMILES cannot be parsed. Extra columns from a CSV row (for example:
-    warhead_match, lipinski_pass) are preserved so weak_label can use them."""
-    row = {"smiles": row_or_smiles} if isinstance(row_or_smiles, str) else dict(row_or_smiles)
-    mol = Chem.MolFromSmiles((row.get("smiles") or "").strip())
-    if mol is None:
-        return None
-
-    row.update(helpers["filter"].filter(mol).to_ml_features())
-    try:
-        sim = helpers["scorer"].score(helpers["encoder"].encode(mol))
-        row["tanimoto"] = float(sim.nn_score)
-        row["potency_score"] = round(1.0 / (1.0 + (sim.nn_ic50 or 0) / 100.0), 4) if sim.nn_ic50 else 0.0
-        nn_mol = Chem.MolFromSmiles(sim.nn_smiles or "")
-        if nn_mol:
-            sc = helpers["scaffold"].extract(mol, nn_mol)
-            row["scaffold_similarity"] = float(sc.scaffold_similarity)
-            row["shared_pct"] = float(sc.shared_pct)
-            row["novel_atoms"] = float(sc.novel_atoms)
-    except Exception as e:
-        print(f"[A10b] similarity failed for {row['smiles'][:40]}: {e}")
-
-    lipinski_violations = float(row.get("violations") or 0)
-    row["lipinski_violations"] = lipinski_violations
-    # Composite drug-likeness penalty: weighted sum of structural alert,
-    # rule-of-five, and property-range red flags (derived from existing flags,
-    # not from any external assay/clinical data).
-    row["composite_risk"] = round(min(
-        0.35 * bool(row.get("pains_flag")) + 0.25 * bool(row.get("brenk_flag"))
-        + 0.25 * (lipinski_violations >= 2) + 0.15 * (0 < float(row.get("qed", 0)) < 0.34)
-        + 0.10 * (float(row.get("logp", 0)) > 5.5) + 0.10 * (float(row.get("mw", 0)) > 600),
-        1.0
-    ), 4)
-    return row
+RANDOM_SEED = 42
+TEST_SIZE = 0.20
+CV_FOLDS = 5
+MAX_EPOCHS = 500
+MIN_EPOCHS = 50
+PATIENCE = 30
+BATCH_SIZE = 64
+LEARNING_RATE = 0.001
+DROPOUT_RATE = 0.30
+HIDDEN_DIM_1 = 64
+HIDDEN_DIM_2 = 32
 
 
 @dataclass
@@ -102,250 +98,405 @@ class RiskPrediction:
 
 
 class RiskClassifier:
-    """Wraps a trained ANN for HIGH/MEDIUM/LOW prediction."""
+    """Wrap a trained ANN for HIGH/MEDIUM/LOW prediction."""
 
-    def __init__(self, model, scaler):
+    def __init__(self, model: nn.Module, scaler: StandardScaler) -> None:
         self.model = model
-        self.scaler = scaler  # sklearn StandardScaler fit on training data
+        self.scaler = scaler
         self.helpers = None
 
     def predict(self, smiles) -> RiskPrediction:
-        # Accept either a SMILES string or a MatchResult-like object that
-        # exposes .query_smiles, so callers from MatchingEngine work directly.
+        """Predict a risk tier from a SMILES string or MatchResult-like object."""
         if hasattr(smiles, "query_smiles"):
             smiles = smiles.query_smiles
+
         if self.helpers is None:
-            self.helpers = {
-                "encoder": FingerprintEncoder(), "filter": DrugLikenessFilter(),
-                "scaffold": ScaffoldExtractor(),
-                "scorer": SimilarityScorer(CompoundLoader().load_reference_library()),
-            }
-        row = featurize(smiles, self.helpers) or {}
-        x_raw = [[float(row.get(f, 0)) for f in FEATURES]]
+            self.helpers = make_helpers()
+
+        row = featurize(smiles, self.helpers)
+        if row is None:
+            raise ValueError("RiskClassifier received invalid SMILES")
+        x_raw = [[float(row.get(feature, 0)) for feature in FEATURES]]
         x = torch.from_numpy(self.scaler.transform(x_raw)).float()
 
         self.model.eval()
         with torch.no_grad():
             probs = torch.softmax(self.model(x), dim=-1).squeeze(0)
-        proba = {t: round(probs[i].item(), 4) for i, t in enumerate(TIERS)}
+
+        proba = {tier: round(probs[i].item(), 4) for i, tier in enumerate(TIERS)}
         tier = max(proba, key=proba.get)
         return RiskPrediction(tier=tier, proba=proba, confidence=proba[tier])
 
     @classmethod
     def load(cls, path=MODEL_PATH):
         saved = torch.load(path, weights_only=False)
-        # Schema check: refuse to load if the saved feature order or tier
-        # order no longer matches the current source. Silent mismatch would
-        # feed wrong values into the model and produce plausible-looking junk.
-        if saved.get("features") != list(FEATURES) or saved.get("tiers") != list(TIERS):
-            raise ValueError(
-                f"Schema mismatch in {path.name}. "
-                f"saved features={saved.get('features')} tiers={saved.get('tiers')} "
-                f"vs current FEATURES={FEATURES} TIERS={TIERS}. Retrain to fix."
-            )
+        validate_saved_schema(saved, path)
         return cls(saved["model"], saved["scaler"])
 
 
-if __name__ == "__main__":
-    def weak_label(row):
-        """Rule-based HIGH/MEDIUM/LOW label, used as temporary training target.
-        Extended variant of A10a's assign_rule_tier (matching_engine.py): same
-        PAINS / Brenk / violations triggers, plus a warhead_match check; LOW
-        requires lipinski_pass + QED + tanimoto thresholds combined."""
-        lipinski_violations = float(row.get("violations") or 0)
-        if (row.get("pains_flag") or row.get("brenk_flag")
-                or lipinski_violations >= 2
-                or ("warhead_match" in row and not row["warhead_match"])):
-            return "HIGH"
-        if (row.get("lipinski_pass") and float(row.get("qed", 0)) >= 0.34
-                and float(row.get("tanimoto", 0)) >= 0.45):
-            return "LOW"
-        return "MEDIUM"
+def make_helpers() -> dict:
+    """Instantiate the feature-engineering helpers used by A10b."""
+    return {
+        "encoder": FingerprintEncoder(),
+        "filter": DrugLikenessFilter(),
+        "scaffold": ScaffoldExtractor(),
+        "scorer": SimilarityScorer(CompoundLoader().load_reference_library()),
+    }
 
-    def canon(s):
-        """RDKit canonical SMILES so 'CC(C)c1c(...)' and 'CC(C)c1nc(...)' for the
-        same molecule collapse to one string. None for invalid SMILES."""
-        m = Chem.MolFromSmiles((s or "").strip())
-        return Chem.MolToSmiles(m) if m else None
 
-    DATA_DIR = Path(__file__).resolve().parents[1]
-    read_csv = lambda p: pd.read_csv(p, true_values=["True"], false_values=["False"])
+def canonicalize_smiles(smiles: str | None) -> str | None:
+    """Return RDKit canonical SMILES, or None for invalid input."""
+    mol = Chem.MolFromSmiles((smiles or "").strip())
+    return Chem.MolToSmiles(mol) if mol else None
 
-    # Load v2 generated molecules, canonicalize, dedup.
-    df = (pd.concat([read_csv(p) for p in
-                     [DATA_DIR / "generation_run" / "v2_validated.csv",
-                      DATA_DIR / "generation_run" / "v2_T08_validated.csv"]])
-            .dropna(subset=["smiles"])
-            .assign(canon=lambda d: d["smiles"].map(canon))
-            .dropna(subset=["canon"])
-            .drop_duplicates(subset="canon"))
 
-    # Drop molecules MolGPT just memorized from its training set (circularity).
-    memorized = {canon(s) for p in [DATA_DIR / "EDA" / "MolGPT" / "statin.csv",
-                                    DATA_DIR / "datasets" / "statin_augmented.csv"]
-                 for s in read_csv(p)["smiles"].dropna()} - {None}
-    n_before = len(df)
-    df = df[~df["canon"].isin(memorized)]
-    print(f"v2 canonical unique: {n_before} -> after memorization filter: {len(df)} "
-          f"(dropped {n_before - len(df)} memorized)")
+def read_bool_csv(path: Path) -> pd.DataFrame:
+    """Read CSV files that may store booleans as True/False strings."""
+    return pd.read_csv(path, true_values=["True"], false_values=["False"])
 
-    # Heavy step: RDKit per molecule. Build a feature DataFrame so weak_label
-    # and X/y extraction are one-liners below.
-    helpers = {"encoder": FingerprintEncoder(), "filter": DrugLikenessFilter(),
-               "scaffold": ScaffoldExtractor(),
-               "scorer": SimilarityScorer(CompoundLoader().load_reference_library())}
-    features_df = pd.DataFrame(filter(None, (featurize(r, helpers) for r in df.to_dict("records"))))
 
-    # Assign each molecule a temporary HIGH/MEDIUM/LOW label via the rule-based
-    # weak_label() (placeholder until real ground-truth labels are available).
+def featurize(row_or_smiles, helpers: dict) -> dict | None:
+    """Convert a SMILES string or CSV row into the fixed 16-feature schema."""
+    row = {"smiles": row_or_smiles} if isinstance(row_or_smiles, str) else dict(row_or_smiles)
+    mol = Chem.MolFromSmiles((row.get("smiles") or "").strip())
+    if mol is None:
+        return None
+
+    row.update(helpers["filter"].filter(mol).to_ml_features())
+    add_similarity_features(row, mol, helpers)
+    add_composite_risk(row)
+    return row
+
+
+def add_similarity_features(row: dict, mol, helpers: dict) -> None:
+    """Attach nearest-neighbor and scaffold-overlap features in place."""
+    try:
+        similarity = helpers["scorer"].score(helpers["encoder"].encode(mol))
+        row["tanimoto"] = float(similarity.nn_score)
+        row["potency_score"] = round(1.0 / (1.0 + (similarity.nn_ic50 or 0) / 100.0), 4) if similarity.nn_ic50 else 0.0
+
+        nn_mol = Chem.MolFromSmiles(similarity.nn_smiles or "")
+        if nn_mol:
+            scaffold = helpers["scaffold"].extract(mol, nn_mol)
+            row["scaffold_similarity"] = float(scaffold.scaffold_similarity)
+            row["shared_pct"] = float(scaffold.shared_pct)
+            row["novel_atoms"] = float(scaffold.novel_atoms)
+    except Exception as exc:
+        print(f"[A10b] similarity failed for {row['smiles'][:40]}: {exc}")
+
+
+def add_composite_risk(row: dict) -> None:
+    """Attach a composite drug-likeness penalty from existing rule features."""
+    lipinski_violations = float(row.get("violations") or 0)
+    row["lipinski_violations"] = lipinski_violations
+
+    row["composite_risk"] = round(
+        min(
+            0.35 * bool(row.get("pains_flag"))
+            + 0.25 * bool(row.get("brenk_flag"))
+            + 0.25 * (lipinski_violations >= 2)
+            + 0.15 * (0 < float(row.get("qed", 0)) < 0.34)
+            + 0.10 * (float(row.get("logp", 0)) > 5.5)
+            + 0.10 * (float(row.get("mw", 0)) > 600),
+            1.0,
+        ), 4)
+
+def weak_label(row: dict) -> str:
+    """Temporary HIGH/MEDIUM/LOW training target derived from Part 1 rules."""
+    lipinski_violations = float(row.get("violations") or 0)
+    has_hard_alert = (
+        row.get("pains_flag")
+        or row.get("brenk_flag")
+        or lipinski_violations >= 2
+        or ("warhead_match" in row and not row["warhead_match"])
+    )
+    if has_hard_alert:
+        return "HIGH"
+
+    has_low_risk_profile = (
+        row.get("lipinski_pass")
+        and float(row.get("qed", 0)) >= 0.34
+        and float(row.get("tanimoto", 0)) >= 0.45
+    )
+    return "LOW" if has_low_risk_profile else "MEDIUM"
+
+
+def load_generated_candidates() -> pd.DataFrame:
+    """Load v2 MolGPT candidates, canonicalize, deduplicate, and drop memorized rows."""
+    source_files = [
+        DATA_DIR / "generation_run" / "v2_validated.csv",
+        DATA_DIR / "generation_run" / "v2_T08_validated.csv",
+    ]
+    candidates = (
+        pd.concat([read_bool_csv(path) for path in source_files])
+        .dropna(subset=["smiles"])
+        .assign(canon=lambda frame: frame["smiles"].map(canonicalize_smiles))
+        .dropna(subset=["canon"])
+        .drop_duplicates(subset="canon")
+    )
+
+    memorized = load_memorized_training_smiles()
+    n_before = len(candidates)
+    candidates = candidates[~candidates["canon"].isin(memorized)]
+    print(f"v2 canonical unique: {n_before} -> after memorization filter: {len(candidates)} (dropped {n_before - len(candidates)} memorized)")
+    return candidates
+
+
+def load_memorized_training_smiles() -> set[str]:
+    """Canonical SMILES present in MolGPT training files."""
+    training_files = [
+        DATA_DIR / "EDA" / "MolGPT" / "statin.csv",
+        DATA_DIR / "datasets" / "statin_augmented.csv",
+    ]
+    memorized = {
+        canonicalize_smiles(smiles)
+        for path in training_files
+        for smiles in read_bool_csv(path)["smiles"].dropna()
+    }
+    return memorized - {None}
+
+
+def build_feature_frame(candidates: pd.DataFrame, helpers: dict) -> pd.DataFrame:
+    """Build feature rows and attach weak labels."""
+    rows = (featurize(row, helpers) for row in candidates.to_dict("records"))
+    features_df = pd.DataFrame(filter(None, rows))
     features_df["tier"] = features_df.apply(weak_label, axis=1)
     print(f"loaded {len(features_df)} rows, label_counts={features_df['tier'].value_counts().to_dict()}")
+    return features_df
 
-    # reindex(columns=FEATURES) enforces the exact 16-feature order and fills any missing column.
-    X = torch.tensor(features_df.reindex(columns=FEATURES, fill_value=0).astype(float).values,
-                     dtype=torch.float32)
-    y = torch.tensor(features_df["tier"].map(TIERS.index).values, dtype=torch.long)
 
-    def train_one(X_train, y_train, val_data=None, max_epochs=500, patience=30,
-                  min_epochs=50, seed=42, verbose=False):
-        """Train one ANN on (X_train, y_train). Returns (model, scaler, best_epoch).
-        Reused for every CV fold and the final whole-data model so the
-        training procedure is guaranteed identical across runs.
+def build_training_tensors(features_df: pd.DataFrame) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return X/y tensors with the exact saved feature and tier order."""
+    feature_values = features_df.reindex(columns=FEATURES, fill_value=0).astype(float).values
+    labels = features_df["tier"].map(TIERS.index).values
+    return torch.tensor(feature_values, dtype=torch.float32), torch.tensor(labels, dtype=torch.long)
 
-        val_data: optional (X_val, y_val). When given, enables EARLY STOPPING:
-        training halts if val_acc has not improved for `patience` epochs, and
-        the model is restored to the weights that achieved the best val_acc.
-        Without val_data, runs the full max_epochs (no stopping criterion)."""
-        scaler = StandardScaler()
-        X_scaled = torch.from_numpy(scaler.fit_transform(X_train.numpy())).float()
-        X_val_scaled = None
-        if val_data is not None:
-            X_val, y_val = val_data
-            X_val_scaled = torch.from_numpy(scaler.transform(X_val.numpy())).float()
-        # class weights from this fold's train labels only (no leakage).
-        counts = torch.bincount(y_train, minlength=3).float()
-        weights = counts.sum() / (counts * 3)
-        torch.manual_seed(seed)
-        model = nn.Sequential(
-            nn.Linear(16, 64), nn.ReLU(), nn.Dropout(0.3),
-            nn.Linear(64, 32), nn.ReLU(), nn.Dropout(0.3),
-            nn.Linear(32, 3),
-        )
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-        loss_fn = nn.CrossEntropyLoss(weight=weights)
-        loader = DataLoader(TensorDataset(X_scaled, y_train), batch_size=64, shuffle=True)
 
-        best_val_acc = 0.0
-        best_state = None
-        best_epoch = max_epochs  # fallback if no val_data / no improvement
-        epochs_no_improve = 0
-
-        for epoch in range(1, max_epochs + 1):
-            model.train()
-            epoch_loss = 0.0
-            for batch_x, batch_y in loader:
-                optimizer.zero_grad()
-                batch_loss = loss_fn(model(batch_x), batch_y)
-                batch_loss.backward()
-                optimizer.step()
-                epoch_loss += batch_loss.item()
-
-            # Track best val_acc each epoch for early stopping.
-            if X_val_scaled is not None:
-                model.eval()
-                with torch.no_grad():
-                    val_acc = (model(X_val_scaled).argmax(-1) == y_val).float().mean().item()
-                if val_acc > best_val_acc:
-                    best_val_acc = val_acc
-                    best_state = {k: v.clone() for k, v in model.state_dict().items()}
-                    best_epoch = epoch
-                    epochs_no_improve = 0
-                else:
-                    epochs_no_improve += 1
-
-            if verbose and epoch % 40 == 0:
-                avg_loss = epoch_loss / len(loader)
-                model.eval()
-                with torch.no_grad():
-                    train_acc = (model(X_scaled).argmax(-1) == y_train).float().mean().item()
-                    if X_val_scaled is not None:
-                        print(f"  epoch {epoch:>3} | loss={avg_loss:.4f}  "
-                              f"train_acc={train_acc:.3f}  val_acc={val_acc:.3f}")
-                    else:
-                        print(f"  epoch {epoch:>3} | loss={avg_loss:.4f}  train_acc={train_acc:.3f}")
-
-            # Early stop: val_acc hasn't improved for `patience` epochs.
-            # Skip the noisy early phase (acc on imbalanced data spikes randomly).
-            if (X_val_scaled is not None and epoch >= min_epochs
-                    and epochs_no_improve >= patience):
-                if verbose:
-                    print(f"  early stop at epoch {epoch}  "
-                          f"(best val_acc={best_val_acc:.3f} at epoch {best_epoch})")
-                break
-
-        # Restore best weights so the returned model is the best-val one.
-        if best_state is not None:
-            model.load_state_dict(best_state)
-        return model, scaler, best_epoch
-
-    # --- Hold out 20% as a true unseen test set BEFORE any training ---
-    # Test set never appears in CV folds or final model training.
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y,
+def build_ann_model(seed: int = RANDOM_SEED) -> nn.Sequential:
+    """Build the A10b ANN architecture."""
+    torch.manual_seed(seed)
+    return nn.Sequential(
+        nn.Linear(len(FEATURES), HIDDEN_DIM_1),
+        nn.ReLU(),
+        nn.Dropout(DROPOUT_RATE),
+        nn.Linear(HIDDEN_DIM_1, HIDDEN_DIM_2),
+        nn.ReLU(),
+        nn.Dropout(DROPOUT_RATE),
+        nn.Linear(HIDDEN_DIM_2, len(TIERS)),
     )
-    print(f"\ntrain: {len(y_train)}  held-out test: {len(y_test)}")
 
-    # --- 5-fold stratified CV on the train portion (robustness assessment) ---
-    # Each fold uses early stopping; we record the best-val epoch per fold and
-    # use the median to size the final model's training run.
+
+def fit_scaler(X_train: torch.Tensor, X_val: torch.Tensor | None = None):
+    """Fit StandardScaler on train features and optionally transform validation features."""
+    scaler = StandardScaler()
+    X_train_scaled = torch.from_numpy(scaler.fit_transform(X_train.numpy())).float()
+    X_val_scaled = None if X_val is None else torch.from_numpy(scaler.transform(X_val.numpy())).float()
+    return scaler, X_train_scaled, X_val_scaled
+
+
+def class_weights(y_train: torch.Tensor) -> torch.Tensor:
+    """Balanced class weights computed from this fold only."""
+    counts = torch.bincount(y_train, minlength=len(TIERS)).float()
+    return counts.sum() / (counts * len(TIERS))
+
+
+def train_one(
+    X_train: torch.Tensor,
+    y_train: torch.Tensor,
+    val_data: tuple[torch.Tensor, torch.Tensor] | None = None,
+    max_epochs: int = MAX_EPOCHS,
+    patience: int = PATIENCE,
+    min_epochs: int = MIN_EPOCHS,
+    seed: int = RANDOM_SEED,
+    history: dict | None = None
+):
+    """Train one ANN and return (model, scaler, best_epoch)."""
+    X_val, y_val = val_data if val_data is not None else (None, None)
+    scaler, X_train_scaled, X_val_scaled = fit_scaler(X_train, X_val)
+
+    model = build_ann_model(seed=seed)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    loss_fn = nn.CrossEntropyLoss(weight=class_weights(y_train))
+    loader = DataLoader(TensorDataset(X_train_scaled, y_train), batch_size=BATCH_SIZE, shuffle=True)
+
+    best_val_acc = 0.0
+    best_state = None
+    best_epoch = max_epochs
+    epochs_no_improve = 0
+
+    for epoch in range(1, max_epochs + 1):
+        epoch_loss = train_epoch(model, loader, optimizer, loss_fn)
+        avg_loss = epoch_loss / len(loader)
+
+        if X_val_scaled is not None:
+            val_acc = accuracy(model, X_val_scaled, y_val)
+            if val_acc > best_val_acc:
+                best_val_acc = val_acc
+                best_state = {key: value.clone() for key, value in model.state_dict().items()}
+                best_epoch = epoch
+                epochs_no_improve = 0
+            else:
+                epochs_no_improve += 1
+        else:
+            val_acc = None
+
+        if history is not None:
+            history["epoch"].append(epoch)
+            history["train_loss"].append(avg_loss)
+            if val_acc is not None:
+                history["val_loss"].append(loss_value(model, loss_fn, X_val_scaled, y_val))
+
+        if should_stop_early(X_val_scaled, epoch, min_epochs, epochs_no_improve, patience):
+            break
+
+    if best_state is not None:
+        model.load_state_dict(best_state)
+    return model, scaler, best_epoch
+
+
+def train_epoch(model: nn.Module, loader: DataLoader, optimizer, loss_fn) -> float:
+    """Run one training epoch and return total batch loss."""
+    model.train()
+    epoch_loss = 0.0
+    for batch_x, batch_y in loader:
+        optimizer.zero_grad()
+        batch_loss = loss_fn(model(batch_x), batch_y)
+        batch_loss.backward()
+        optimizer.step()
+        epoch_loss += batch_loss.item()
+    return epoch_loss
+
+
+def accuracy(model: nn.Module, X_scaled: torch.Tensor, y_true: torch.Tensor) -> float:
+    """Compute classification accuracy for already-scaled features."""
+    model.eval()
+    with torch.no_grad():
+        return (model(X_scaled).argmax(-1) == y_true).float().mean().item()
+
+
+def loss_value(model: nn.Module, loss_fn, X_scaled: torch.Tensor, y_true: torch.Tensor) -> float:
+    """Compute loss for an already-scaled tensor without updating weights."""
+    model.eval()
+    with torch.no_grad():
+        return float(loss_fn(model(X_scaled), y_true).item())
+
+
+def should_stop_early(X_val_scaled: torch.Tensor | None, epoch: int, min_epochs: int, epochs_no_improve: int, patience: int) -> bool:
+    """Early stopping guard; disabled when no validation data is provided."""
+    return X_val_scaled is not None and epoch >= min_epochs and epochs_no_improve >= patience
+
+
+def run_cross_validation(X_train: torch.Tensor, y_train: torch.Tensor) -> tuple[list[int], dict]:
+    """Run 5-fold stratified CV and return best epochs plus one loss curve."""
     print("\n--- 5-fold stratified CV (on train portion only) ---")
     cv_accuracies = []
     cv_best_epochs = []
-    kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    loss_history = empty_training_history()
+    kfold = StratifiedKFold(n_splits=CV_FOLDS, shuffle=True, random_state=RANDOM_SEED)
+
     for cv_step, (cv_train_idx, cv_val_idx) in enumerate(kfold.split(X_train, y_train), 1):
+        fold_history = loss_history if cv_step == 1 else None
         cv_model, cv_scaler, best_epoch = train_one(
-            X_train[cv_train_idx], y_train[cv_train_idx],
+            X_train[cv_train_idx],
+            y_train[cv_train_idx],
             val_data=(X_train[cv_val_idx], y_train[cv_val_idx]),
+            history=fold_history,
         )
         X_val = torch.from_numpy(cv_scaler.transform(X_train[cv_val_idx].numpy())).float()
-        cv_model.eval()
-        with torch.no_grad():
-            predictions = cv_model(X_val).argmax(-1)
-        accuracy = (predictions == y_train[cv_val_idx]).float().mean().item()
-        cv_accuracies.append(accuracy)
+        fold_accuracy = accuracy(cv_model, X_val, y_train[cv_val_idx])
+        cv_accuracies.append(fold_accuracy)
         cv_best_epochs.append(best_epoch)
-        print(f"  cv step {cv_step}: val_acc = {accuracy:.3f}  (best epoch = {best_epoch})")
+        print(f"  cv step {cv_step}: val_acc = {fold_accuracy:.3f}  (best epoch = {best_epoch})")
 
-    accuracies = pd.Series(cv_accuracies)
-    print(f"\nmean cv val_acc = {accuracies.mean():.3f}")
+    print(f"\nmean cv val_acc = {pd.Series(cv_accuracies).mean():.3f}")
+    return cv_best_epochs, loss_history
 
-    # --- Final model: train on full 80% train, evaluate ONCE on held-out test ---
-    # Use the median best-epoch from CV folds: this is the data-driven sweet
-    # spot before overfitting kicks in. No val_data here so it just runs that
-    # many epochs (early stopping isn't applicable without a val set).
-    final_epochs = int(pd.Series(cv_best_epochs).median())
-    print(f"\n--- training final model on {len(y_train)} samples "
-          f"(epochs={final_epochs}, median of CV best epochs {cv_best_epochs}) ---")
-    model, scaler, _ = train_one(X_train, y_train, max_epochs=final_epochs, verbose=True)
 
+def evaluate_test_set(model: nn.Module, scaler: StandardScaler, X_test: torch.Tensor, y_test: torch.Tensor) -> None:
+    """Evaluate once on the test set."""
     X_test_scaled = torch.from_numpy(scaler.transform(X_test.numpy())).float()
     model.eval()
     with torch.no_grad():
         test_predictions = model(X_test_scaled).argmax(-1)
+
     test_accuracy = (test_predictions == y_test).float().mean().item()
-    test_confusion = pd.crosstab(
-        pd.Series([TIERS[i] for i in y_test.tolist()], name="true"),
-        pd.Series([TIERS[i] for i in test_predictions.tolist()], name="pred"),
-    )
-    print(f"\nFINAL test_acc = {test_accuracy:.3f}  (on {len(y_test)} held-out molecules)")
+    test_confusion = pd.crosstab(pd.Series([TIERS[i] for i in y_test.tolist()], name="true"), pd.Series([TIERS[i] for i in test_predictions.tolist()], name="pred"))
+    print(f"\nFINAL test_acc = {test_accuracy:.3f}  (on {len(y_test)} test molecules)")
     print(test_confusion)
 
-    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(
-        {"model": model, "scaler": scaler, "features": list(FEATURES), "tiers": list(TIERS)},
-        MODEL_PATH,
-    )
-    print(f"\nsaved -> {MODEL_PATH}")
 
-    demo = "CC(=O)c1c(F)c(-c2ccc(F)cc2)c(-c2ccc(F)cc2)n1CCC(O)CC(O)CC(=O)O"
-    print(RiskClassifier.load().predict(demo))
+def save_model(model: nn.Module, scaler: StandardScaler, path: Path = MODEL_PATH) -> None:
+    """Persist the model, scaler, and schema metadata."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save({"model": model, "scaler": scaler, "features": list(FEATURES), "tiers": list(TIERS)}, path)
+    print(f"\nsaved -> {path}")
+
+
+def empty_training_history() -> dict:
+    """Container for plotting training and validation loss."""
+    return {"epoch": [], "train_loss": [], "val_loss": []}
+
+
+def save_training_curve(history: dict, path: Path = TRAINING_CURVE_PATH) -> None:
+    """Save a train/validation loss plot.
+
+    This plot is for reporting and quality control only. It does not affect
+    model training, model selection, saved weights, or validation results.
+    """
+    if not history["epoch"]:
+        print("\ntraining curve skipped: no history recorded")
+        return
+
+    fig, ax_loss = plt.subplots(figsize=(7, 4.5))
+    ax_loss.plot(history["epoch"], history["train_loss"], color="#1f77b4", label="train cross-entropy")
+    if history["val_loss"]:
+        ax_loss.plot(history["epoch"], history["val_loss"], color="#d62728", label="validation cross-entropy")
+    ax_loss.set_xlabel("Epoch")
+    ax_loss.set_ylabel("Cross-entropy loss")
+    ax_loss.legend()
+
+    ax_loss.set_title("Risk Classifier ANN Loss Curve")
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+    print(f"\ntraining curve saved -> {path}")
+
+
+def validate_saved_schema(saved: dict, path: Path) -> None:
+    """Refuse to load if feature or tier order changed."""
+    if saved.get("features") == list(FEATURES) and saved.get("tiers") == list(TIERS):
+        return
+
+    raise ValueError(
+        f"Schema mismatch in {path.name}. "
+        f"saved features={saved.get('features')} tiers={saved.get('tiers')} "
+        f"vs current FEATURES={FEATURES} TIERS={TIERS}. Retrain to fix."
+    )
+
+
+def train_and_save() -> None:
+    """Run the full A10b training workflow."""
+    helpers = make_helpers()
+    candidates = load_generated_candidates()
+    features_df = build_feature_frame(candidates, helpers)
+    X, y = build_training_tensors(features_df)
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=TEST_SIZE, random_state=RANDOM_SEED, stratify=y)
+    print(f"\ntrain: {len(y_train)}  test: {len(y_test)}")
+
+    cv_best_epochs, loss_history = run_cross_validation(X_train, y_train)
+    final_epochs = int(pd.Series(cv_best_epochs).median())
+    print(f"\n--- training final model on {len(y_train)} samples (epochs={final_epochs}, median of CV best epochs {cv_best_epochs}) ---")
+    model, scaler, _ = train_one(X_train, y_train, max_epochs=final_epochs)
+
+    evaluate_test_set(model, scaler, X_test, y_test)
+    save_training_curve(loss_history)
+    save_model(model, scaler)
+    print(RiskClassifier.load().predict(DEMO_SMILES))
+
+
+DEMO_SMILES = "CC(=O)c1c(F)c(-c2ccc(F)cc2)c(-c2ccc(F)cc2)n1CCC(O)CC(O)CC(=O)O"
+
+
+if __name__ == "__main__":
+    train_and_save()
