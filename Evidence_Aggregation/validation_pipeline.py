@@ -38,8 +38,8 @@ except ImportError:
 
 
 DEFAULT_INPUT_CSVS = [
-    PROJECT_ROOT / "generation_run" / "v2_validated_novel.csv",
-    PROJECT_ROOT / "generation_run" / "v2_T08_validated_novel.csv",
+    PROJECT_ROOT / "MolGPT_Generation" / "generation_run" / "v2_validated_novel.csv",
+    PROJECT_ROOT / "MolGPT_Generation" / "generation_run" / "v2_T08_validated_novel.csv",
 ]
 # Set to None to run all unique SMILES from both Girish novel-only CSV files.
 DEFAULT_BATCH_LIMIT = None # change this number to number of SMILES to run; NONE means all SMILES
