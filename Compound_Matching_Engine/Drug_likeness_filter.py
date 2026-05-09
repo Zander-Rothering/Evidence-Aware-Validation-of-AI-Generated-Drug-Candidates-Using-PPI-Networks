@@ -5,10 +5,7 @@ from rdkit import Chem
 from rdkit.Chem import Descriptors, QED, rdMolDescriptors
 from rdkit.Chem.FilterCatalog import FilterCatalog, FilterCatalogParams
 
-try:
-    from .Filter_result import FilterResult
-except ImportError:
-    from Filter_result import FilterResult
+from .Filter_result import FilterResult
 
 
 class DrugLikenessFilter:

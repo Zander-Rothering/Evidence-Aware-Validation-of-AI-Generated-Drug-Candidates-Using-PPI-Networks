@@ -1,4 +1,4 @@
-"""B3 signal classifier for presentation MVP.
+"""Minimal B3 signal classifier for presentation MVP.
 
 Usage (from this folder):
     python signal_classifier_mvp.py
@@ -6,9 +6,9 @@ Usage (from this folder):
 
 `--query` overrides the default PubMed search string; omit it to use the built-in demo query.
 
-Maps extracted entities into downstream signal types:
+Maps extracted entities into two downstream signal types:
   - EFFICACY for LDL / cholesterol lowering mentions
-  - SAFETY_FLAG for safety/tolerability-adverse cues
+  - SAFETY_FLAG for the remaining adverse-effect mentions
 
 Developed with AI assistance for syntax support.
 """
@@ -36,76 +36,31 @@ class SignalClassifier:
             "hyperchoterol",
             "ldl-c",
             "ldl - c",
-            "ldl-c reduction",
-            "ldl-c lowering",
-            "reduced ldl-c",
-            "lowers ldl-c",
             "ldl cholesterol",
             "ldl - cholesterol",
-            "ldl reduction",
-            "ldl lowering",
-            "reduced ldl",
-            "lowers ldl",
             "density lipoprotein",
             "low-density lipoprotein",
             "low density lipoprotein",
-            "low-density lipoprotein cholesterol",
-            "low density lipoprotein cholesterol",
             "lipoprotein - cholesterol",
             "lipoprotein cholesterol",
-            "cholesterol reduction",
-            "cholesterol lowering",
-            "plasma cholesterol",
-            "serum cholesterol",
-            "hyperlipidemia",
-            "lipid lowering",
-            "lipid-lowering",
         }
-        # Conservative vocabulary guard for entity->signal mapping:
-        # ADVERSE_EFFECT/DISEASE labels become SAFETY_FLAG only when text matches
-        # known safety/tolerability terms.
+        # Only ADVERSE_EFFECT spans whose text hits one of these become SAFETY_FLAG.
         self.safety_flag_terms = {
             "adverse effect",
             "adverse effects",
             "adverse event",
             "adverse events",
-            "side effect",
-            "side effects",
             "creatine kinase",
-            "creatine phosphokinase",
-            "ck elevation",
-            "ck elevations",
             "hepatotoxicity",
-            "hepatic",
-            "hepatotoxic",
-            "transaminase",
-            "aminotransferase",
             "liver",
             "liver enzyme",
-            "liver enzymes",
-            "enzyme elevations",
             "muscle",
-            "muscle toxicity",
-            "muscle symptoms",
             "muscular",
-            "muscular toxicity",
             "myalgia",
             "myopathy",
-            "myositis",
-            "rash",
-            "pruritus",
-            "urticaria",
             "pain",
             "renal",
-            "renal dysfunction",
-            "renal impairment",
-            "acute renal failure",
-            "kidney",
             "rhabdomyolysis",
-            "dose-dependent",
-            "discontinuation",
-            "serious adverse",
-            "clinically important adverse",
             "toxicity",
         }
 
@@ -132,7 +87,7 @@ class SignalClassifier:
             }
 
         match label:
-            case "ADVERSE_EFFECT" | "DISEASE":
+            case "ADVERSE_EFFECT":
                 if not self.is_safety_flag_text(text):
                     return None
                 return {
@@ -140,7 +95,7 @@ class SignalClassifier:
                     "signal_type": "SAFETY_FLAG",
                     "weight": score,
                 }
-            case _:  # everything else (e.g., DRUG, PROTEIN): no signal
+            case _:  # everything else (DISEASE, PROTEIN, …): no signal
                 return None
 
     def classify(self, entities: list[dict]) -> list[dict]:

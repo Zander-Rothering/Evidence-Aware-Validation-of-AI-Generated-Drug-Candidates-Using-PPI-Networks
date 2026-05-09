@@ -1,6 +1,6 @@
 """Activity 4 — Build the Reference Library from ChEMBL.
    Activity 9 — Load SIDER inherited adverse-effect profiles.
-   Developed with AI assistance for syntax support.
+   Developed with AI assistance (Claude, Anthropic) for syntax support.
 """
 
 import os
@@ -40,7 +40,7 @@ class CompoundLoader:
     """Loads known HMGCR inhibitors from ChEMBL or a fallback statin list."""
 
     def __init__(self, target_chembl_id="CHEMBL402"):
-        """Set ChEMBL target ID (default: HMGCR human)."""
+        """Set ChEMBL target ID (default: HMGCR human, HMG-CoA Reductase)."""
         self.target_chembl_id = target_chembl_id
         self.library = []
         self.fingerprint_generator = GetMorganGenerator(radius=2, fpSize=2048)
@@ -379,6 +379,15 @@ class CompoundLoader:
             for effect in effects
         ]
 
+    def count_sider_risks(self, nn_name: str, tanimoto: float = 1.0) -> int:
+        """Convenience: number of inherited adverse effects for `nn_name`.
+
+        Defaults to tanimoto=1.0 so the inheritance threshold never blocks
+        a pure count lookup. Pass an explicit tanimoto to apply the
+        inherit-by-similarity gate identical to load_sider_risks().
+        """
+        return len(self.load_sider_risks(nn_name, tanimoto))
+
 
 if __name__ == "__main__":
     loader = CompoundLoader()
@@ -412,3 +421,4 @@ if __name__ == "__main__":
                 print(f"  [{r['tag']}] {r['effect']}")
             if len(risks) > 5:
                 print(f"  ... and {len(risks) - 5} more")
+

@@ -52,11 +52,13 @@ class SimilarityScorer:
         if not self.library:
             raise ValueError("reference library is empty")
 
-        scores: list[tuple[str, str, float, float]] = []
-        for name, smiles, ic50, ref_fp in self.library:
-            # calculate tanimoto similarity using RDkit's DataStructs module
-            tanimoto = DataStructs.TanimotoSimilarity(query_fp, ref_fp)
-            scores.append((name, smiles, ic50, tanimoto))
+        # Use BulkTanimotoSimilarity (single C++ call) instead of a Python loop.
+        ref_fps = [ref_fp for _, _, _, ref_fp in self.library]
+        sims = DataStructs.BulkTanimotoSimilarity(query_fp, ref_fps)
+        scores: list[tuple[str, str, float, float]] = [
+            (name, smiles, ic50, float(t))
+            for (name, smiles, ic50, _), t in zip(self.library, sims)
+        ]
         # sort by tanimoto score descending
         scores.sort(key=lambda x: x[3], reverse=True)
 

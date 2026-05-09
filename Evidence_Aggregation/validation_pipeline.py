@@ -42,7 +42,7 @@ DEFAULT_INPUT_CSVS = [
     PROJECT_ROOT / "generation_run" / "v2_T08_validated_novel.csv",
 ]
 # Set to None to run all unique SMILES from both Girish novel-only CSV files.
-DEFAULT_BATCH_LIMIT = None # change this number to number of SMILES to run; `None` means all SMILES
+DEFAULT_BATCH_LIMIT = None # change this number to number of SMILES to run; NONE means all SMILES
 
 
 class ValidationPipeline:
@@ -51,7 +51,7 @@ class ValidationPipeline:
     def __init__(self, config: RiskWeightConfig = None):
         self.matching_engine = MatchingEngine()
         self.nlp_agent = NLPAgent()
-        self.aggregator = EvidenceAggregator(config or RiskWeightConfig())
+        self.aggregator = EvidenceAggregator(config or RiskWeightConfig(0.4, 0.3, 0.3))
 
     def run(self, smiles: str) -> RiskScore:
         # Part 1
