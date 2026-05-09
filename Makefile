@@ -1,6 +1,6 @@
 ENV_NAME=project_env
 
-.PHONY: pc_env update_pc mac_env update_mac remove
+.PHONY: pc_env update_pc mac_env update_mac remove run_gnn run_compound_matching run_nlp_agent run_pipeline
 
 pc_env:
 	conda env create -f environment_pc.yml
@@ -21,10 +21,10 @@ run_gnn:
 	cd GNN_PPI_Network && python network_result.py
 
 run_compound_matching:
-	cd Compound_Matching_Engine && risk_classifier.py
+	cd Compound_Matching_Engine && python matching_engine.py
 
 run_nlp_agent:
-	cd NLP_Literature_Agent && python literature_result.py
+	cd NLP_Literature_Agent && python nlp_agent.py
 
 run_pipeline:
-	cd Evidence_Aggregation && python risk_score.py
+	cd Evidence_Aggregation && python validation_pipeline.py
