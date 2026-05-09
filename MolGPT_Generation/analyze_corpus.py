@@ -17,8 +17,7 @@ from rdkit import Chem, RDLogger
 
 RDLogger.DisableLog("rdApp.*")
 
-REPO = Path("/Users/girishkrishna/Documents/MSSE_Du/277B Machine Learning/"
-            "Project_Code/Evidence-Aware-Validation-of-AI-Generated-Drug-Candidates-Using-PPI-Networks")
+REPO = Path(__file__).parent.parent
 sys.path.insert(0, str(REPO / "EDA"))
 
 # Reuse the exact filter logic so we don't drift from what the pipeline actually does.
@@ -28,7 +27,7 @@ from filter_chembl_statins import (  # type: ignore
     canonicalise_for_molgpt,
 )
 
-TSV = REPO / "chembl402_activities.tsv"
+TSV = Path(__file__).parent / "data" / "chembl402_activities.tsv"
 
 
 def strict_layer1(df: pd.DataFrame) -> pd.DataFrame:

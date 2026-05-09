@@ -25,12 +25,13 @@ from rdkit.Chem.FilterCatalog import FilterCatalog, FilterCatalogParams
 
 RDLogger.DisableLog("rdApp.*")
 
-ROOT       = Path(__file__).parent
-GEN_DIR    = ROOT / "generation_run"
-CHEMBL_CSV = ROOT / "datasets" / "statin_filtered.csv"
+ROOT         = Path(__file__).parent
+PROJECT_ROOT = ROOT.parent
+GEN_DIR      = ROOT / "generation_run"
+CHEMBL_CSV   = PROJECT_ROOT / "datasets" / "statin_filtered.csv"
 
 # Marketed-statin reference set lives in EDA/ as the single source of truth.
-sys.path.insert(0, str(ROOT / "EDA"))
+sys.path.insert(0, str(PROJECT_ROOT / "EDA"))
 from marketed_statins import MARKETED_STATINS  # noqa: E402
 
 # ---------------------------------------------------------------------------

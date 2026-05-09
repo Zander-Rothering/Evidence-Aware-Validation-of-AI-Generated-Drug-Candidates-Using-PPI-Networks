@@ -22,8 +22,9 @@ from rdkit import Chem, RDLogger
 
 RDLogger.DisableLog("rdApp.*")
 
-INPUT  = Path("datasets/statin_filtered.csv")
-OUTPUT = Path("datasets/statin_augmented.csv")
+PROJECT_ROOT = Path(__file__).parent.parent
+INPUT  = PROJECT_ROOT / "datasets" / "statin_filtered.csv"
+OUTPUT = PROJECT_ROOT / "datasets" / "statin_augmented.csv"
 
 VARIANTS_PER_CMPD = 15       # target unique random SMILES per compound
 ATTEMPTS          = 20       # max random draws per compound

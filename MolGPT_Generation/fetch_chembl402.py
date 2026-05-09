@@ -22,7 +22,7 @@ import pandas as pd
 from chembl_webresource_client.new_client import new_client
 
 TARGET_CHEMBL_ID = "CHEMBL402"
-OUTPUT_TSV = Path("chembl402_activities.tsv")
+OUTPUT_TSV = Path(__file__).parent / "data" / "chembl402_activities.tsv"
 
 REQUIRED_COLS = [
     "canonical_smiles",
