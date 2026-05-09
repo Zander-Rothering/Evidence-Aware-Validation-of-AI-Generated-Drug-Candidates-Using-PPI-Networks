@@ -10,3 +10,9 @@ __pycache__/
 
 # Caches and runtime artifacts
 *.pkl
+
+# Pipeline run artifacts
+validation_results.csv
+validation_results.json
+Evidence_Aggregation/validation_results.csv
+Evidence_Aggregation/validation_results.json
