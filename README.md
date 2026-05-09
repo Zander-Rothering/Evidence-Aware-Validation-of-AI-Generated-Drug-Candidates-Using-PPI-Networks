@@ -52,7 +52,9 @@ It is recommended to install all dependencies using the Makefile command to avoi
 
 `MolGPT_Generation/` Upstream MolGPT v2 fine-tuning, sampling, validation, and rendering pipeline that produces the candidate SMILES consumed by the validation pipeline
 
-## MolGPT Generation Pipeline
+## Pipeline Architecture
+
+### MolGPT Generation Pipeline
 
 The MolGPT Generation Pipeline is the upstream workflow that produces the AI-generated candidate SMILES which the four-component validation pipeline then evaluates. It fine-tunes a transformer-decoder generative model on filtered HMGCR inhibitor SMILES from ChEMBL402, samples thousands of candidates from the fine-tuned model, applies pharmacophore and drug-likeness filters, and renders the top-ranked novel candidates as a structured summary. The scripts live in `MolGPT_Generation/` and are invoked directly with `python -m MolGPT_Generation.<script>` rather than through the Makefile, since most steps are one-time or rerun-rarely operations rather than recurring pipeline runs.
 
@@ -62,9 +64,6 @@ The actual MolGPT v2 fine-tuning is performed inside the `molgpt/` submodule usi
 
 The rendering step uses `render_v2_top16.py` to draw the top-N novel candidates as a 4x4 PNG grid annotated with warhead, Lipinski, and PAINS flags. The summary step uses `build_v2_summary.py` to filter the validated set to novel-only candidates, build a two-panel summary figure pairing the training loss curve with the Tanimoto similarity distribution, and write a markdown summary suitable for the project report. The `*_validated_novel.csv` files produced at this stage are the input that the validation pipeline reads as its candidate batch.
 
-## Pipeline Architecture
-
-
 ### Compound Matching Engine Architecture
 
 The Compound Matching Engine is the structural evidence stream of the validation pipeline. It transforms each generated SMILES into a `MatchResult` dataclass through a chained sequence of typed stages (A2 through A10c) that handle parsing, similarity scoring, drug-likeness filtering, and risk classification. The A2 `SmilesParser` validates each input SMILES via RDKit and rejects fragments and small molecules. The A3 `FingerprintEncoder` produces a 2048-bit Morgan circular fingerprint at radius 2, exposing both an RDKit `ExplicitBitVect` for similarity computation and a NumPy array for the ANN classifier from a single generator instance. The A4 `CompoundLoader` queries ChEMBL target CHEMBL402 (HMG-CoA Reductase) for up to 200 reference inhibitors at startup and falls back to seven hardcoded marketed statins when the API is unreachable.
@@ -72,7 +71,6 @@ The Compound Matching Engine is the structural evidence stream of the validation
 The A5 `SimilarityScorer` ranks the query against the cached reference set using vectorised Tanimoto similarity and returns the nearest neighbour ChEMBL identifier with its raw score. The A6 and A7 `DrugLikenessFilter` computes seven physicochemical descriptors (MW, LogP, HBD, HBA, QED, TPSA, rotatable bonds) and applies the four rule Lipinski check along with the PAINS and Brenk structural alert catalogs. The A8 `ScaffoldExtractor` extracts the Murcko scaffold of the query and its nearest neighbour and returns a scaffold level Tanimoto coefficient that captures core ring system overlap independent of sidechain decoration. The A9 SIDER lookup maps the nearest neighbour ChEMBL identifier to a precompiled adverse effect table for downstream NLP cueing.
 
 The A10a `RulesEngine` is a deterministic six rule decision engine that produces an interpretable risk tier based on Tanimoto thresholds, Lipinski violations, structural alert flags, SIDER adverse effect counts, and QED. The A10b `RiskClassifier` is a small PyTorch ANN trained on weak rule derived structural labels that returns a supporting ML tier and class probability. The A10c reconciliation step compares the rule and ANN verdicts and writes a confidence flag indicating whether they agreed. The final `MatchResult` carries the canonical query SMILES, nearest neighbour metadata, the full feature dictionary, both risk tiers, the model probability, and a structured evidence trail downstream to the NLP Literature Agent and the Evidence Aggregator.
-
 
 ### NLP Agent Architecture
 
