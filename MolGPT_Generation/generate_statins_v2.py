@@ -27,15 +27,16 @@ from rdkit.Chem import Descriptors, Lipinski, QED
 RDLogger.DisableLog("rdApp.*")
 
 ROOT = Path(__file__).parent
-sys.path.insert(0, str(ROOT / "molgpt" / "train"))
+sys.path.insert(0, str(ROOT.parent / "molgpt" / "train"))
 from model import GPT, GPTConfig  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Config (matches the augmented training corpus)
 # ---------------------------------------------------------------------------
-CKPT_PATH   = ROOT / "cond_gpt" / "weights" / "statin_model_v2.pt"
-STOI_PATH   = ROOT / "molgpt"   / "statin_stoi.json"
-TRAIN_CSV   = ROOT / "datasets" / "statin_filtered.csv"   # 51 filtered training compounds
+PROJECT_ROOT = ROOT.parent
+CKPT_PATH   = PROJECT_ROOT / "cond_gpt" / "weights" / "statin_model_v2.pt"
+STOI_PATH   = PROJECT_ROOT / "molgpt"   / "statin_stoi.json"
+TRAIN_CSV   = PROJECT_ROOT / "datasets" / "statin_filtered.csv"   # 51 filtered training compounds
 OUT_DIR     = ROOT / "generation_run"
 
 VOCAB_SIZE  = 94
