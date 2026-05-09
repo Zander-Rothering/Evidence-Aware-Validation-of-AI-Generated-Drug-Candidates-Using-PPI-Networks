@@ -18,13 +18,13 @@ remove:
 	conda remove -n $(ENV_NAME) --all -y
 
 run_compound_matching:
-	cd Compound_Matching_Engine && python matching_engine.py
-
-run_gnn:
-	cd GNN_PPI_Network && python network_result.py
+	python -m Compound_Matching_Engine.Match_result
 
 run_nlp_agent:
-	cd NLP_Literature_Agent && python literature_result.py
+	cd NLP_Literature_Agent && python -m nlp_agent
+
+run_gnn:
+	cd GNN_PPI_Network && python -m network_result
 
 run_pipeline:
-	cd Evidence_Aggregation && python validation_pipeline.py
+	cd Evidence_Aggregation && python -m validation_pipeline
