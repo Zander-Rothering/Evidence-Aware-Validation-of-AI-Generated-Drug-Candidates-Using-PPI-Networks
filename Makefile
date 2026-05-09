@@ -18,7 +18,7 @@ remove:
 	conda remove -n $(ENV_NAME) --all -y
 
 run_compound_matching:
-	python -m Compound_Matching_Engine.Match_result
+	python -m Compound_Matching_Engine.matching_engine
 
 run_nlp_agent:
 	cd NLP_Literature_Agent && python -m nlp_agent
